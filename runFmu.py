@@ -1,24 +1,36 @@
 import numpy as np
 from fmpy import read_model_description, extract
 from fmpy.fmi2 import FMU2Slave
-import shutil
 import tempfile
+import shutil
 import matplotlib.pyplot as plt
+import os
 
 # ==============================
 # CONFIGURAZIONE
 # ==============================
-fmu_filename = 'GreenRoofModel.fmu'
-t_stop = 3600.0      # durata simulazione (s)
-step_size = 10.0     # passo simulazione (s)
+fmu_filename = 'GreenRoofSim.fmu'   # Nome del file FMU
+t_stop = 3600.0                     # Durata simulazione [s]
+step_size = 10.0                    # Passo di simulazione [s]
 
 # ==============================
 # CARICAMENTO MODELLO
 # ==============================
+# Crea una cartella temporanea dove estrarre il contenuto dell’FMU
 unzipdir = tempfile.mkdtemp()
+
+# Legge la descrizione del modello (modelDescription.xml)
 model_description = read_model_description(fmu_filename)
+
+# Estrae i file binari e XML
 extract(fmu_filename, unzipdir)
 
+# Crea un dizionario con i valueReference delle variabili
+vrs = {}
+for variable in model_description.modelVariables:
+    vrs[variable.name] = variable.valueReference
+
+# Istanzia il modello FMU
 fmu = FMU2Slave(
     guid=model_description.guid,
     unzipDirectory=unzipdir,
@@ -26,6 +38,7 @@ fmu = FMU2Slave(
     instanceName='instance1'
 )
 
+# Inizializzazione FMI
 fmu.instantiate()
 fmu.setupExperiment(startTime=0.0)
 fmu.enterInitializationMode()
@@ -38,24 +51,28 @@ time = 0.0
 times = []
 sensor_temp = []
 
-# valori fissi per esempio (puoi renderli dinamici)
-SolarRadiation = 800.0  # W/m2
-AmbientTemp = 25.0      # °C
-WindSpeed = 2.0         # m/s
+# Valori fissi di input (puoi renderli dinamici più avanti)
+SolarRadiation = 800.0  # [W/m²]
+AmbientTemp = 25.0      # [°C]
+WindSpeed = 2.0         # [m/s]
 
-while time < t_stop:
-    # imposta gli input
-    fmu.setReal([fmu.getVariableByName('SolarRadiation').valueReference], [SolarRadiation])
-    fmu.setReal([fmu.getVariableByName('AmbientTemp').valueReference], [AmbientTemp])
-    fmu.setReal([fmu.getVariableByName('WindSpeed').valueReference], [WindSpeed])
+print("Simulazione avviata...")
 
-    # esegui un passo
-    fmu.doStep(currentCommunicationPoint=time, communicationStepSize=step_size)
+while time <= t_stop:
+    # Imposta gli input
+    fmu.setReal([vrs['SolarRadiation']], [SolarRadiation])
+    fmu.setReal([vrs['AmbientTemp']], [AmbientTemp])
+    fmu.setReal([vrs['WindSpeed']], [WindSpeed])
 
-    # leggi l’output
-    y = fmu.getReal([fmu.getVariableByName('SensorTemp').valueReference])[0]
+    # Esegui un passo di co-simulazione
+    status = fmu.doStep(currentCommunicationPoint=time, communicationStepSize=step_size)
+    if status != 0:
+        print(f"⚠️ Avviso: passo a t={time} restituisce status={status}")
 
-    # salva i risultati
+    # Leggi l’output
+    y = fmu.getReal([vrs['SensorTemp']])[0]
+
+    # Salva i risultati
     times.append(time)
     sensor_temp.append(y)
 
@@ -68,12 +85,15 @@ fmu.terminate()
 fmu.freeInstance()
 shutil.rmtree(unzipdir)
 
+print("Simulazione completata ✅")
+
 # ==============================
 # RISULTATI
 # ==============================
-plt.plot(times, sensor_temp)
+plt.figure()
+plt.plot(times, sensor_temp, '-o')
 plt.xlabel('Time [s]')
 plt.ylabel('Sensor Temperature [°C]')
-plt.title('Simulazione greenroofmodel.fmu')
+plt.title('Simulazione GreenRoofSim.fmu')
 plt.grid(True)
 plt.show()
