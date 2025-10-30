@@ -117,7 +117,7 @@ def analyze_bic_for_gmm(residuals, max_k, variable_name, output_dir):
     return bic_scores
 
 def main():
-    CSV_FILE = 'meteoblue_data_2020_2025.csv'
+    CSV_FILE = 'meteoblue_data_2020_2024.csv'
     MAX_K_COMPONENTS = 8
 
     # Create output directory

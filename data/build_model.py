@@ -55,7 +55,7 @@ def fit_and_save_gmm(residuals_series, variable_name):
     gmm = GaussianMixture(n_components=k, random_state=42)
     gmm.fit(residuals_reshaped)
 
-    model_filename = os.path.join(PKL_DIR, f"{variable_name.lower()}_gmm.pkl")
+    model_filename = os.path.join(PKL_DIR, f"{variable_name.lower().replace(' ', '_')}_gmm.pkl")
     with open(model_filename, 'wb') as f:
         pickle.dump(gmm, f)
 
@@ -100,7 +100,7 @@ def plot_final_gmm_fit(residuals_for_plot, gmm, variable_name, unit):
     plt.grid(True, linestyle='--', alpha=0.6)
     plt.xlim(x.min(), x.max())
 
-    filepath = os.path.join(PLOT_DIR, f"{variable_name.lower()}_gmm.png")
+    filepath = os.path.join(PLOT_DIR, f"{variable_name.lower().replace(' ', '_')}_gmm.png")
     plt.savefig(filepath)
     plt.close()
     print(f"Saved final fit plot: {filepath}")
@@ -116,7 +116,7 @@ def main():
     # Fit and save Gaussian Mixture Models
     gmm_rad, rad_residuals_fitted = fit_and_save_gmm(residuals_data['Rad_Residual'], 'Radiation')
     gmm_temp, temp_residuals_fitted = fit_and_save_gmm(residuals_data['Temp_Residual'], 'Temperature')
-    gmm_wind, wind_residuals_fitted = fit_and_save_gmm(residuals_data['Wind_Residual'], 'WindSpeed')
+    gmm_wind, wind_residuals_fitted = fit_and_save_gmm(residuals_data['Wind_Residual'], 'Wind Speed')
 
     print("")
 
