@@ -1,1 +1,5 @@
 .venv
+
+data/csv/
+data/pkl_models/
+data/plots/

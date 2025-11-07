@@ -8,29 +8,31 @@ import os
 PLOT_DIR = 'plots'
 CSV_DIR = 'csv'
 
+
 def load_and_clean_data(csv_path):
+    import pandas as pd
+
     try:
-        data = pd.read_csv(csv_path, skiprows=9, header=0)  # Skip metadata rows (9 rows)
+        data = pd.read_csv(csv_path, skiprows=3, header=0)  # Skip first 3 rows of metadata
     except FileNotFoundError:
-        print(f"Error: Data file '{csv_path}' not found. Please download it first.")
+        print(f"Error: Data file '{csv_path}' not found.")
         sys.exit()
 
+    # Rename to internal names
     data = data.rename(columns={
-        'timestamp': 'Timestamp',
-        'Basel Temperature [2 m elevation corrected]': 'Temp_C',
-        'Basel Wind Speed [10 m]': 'Wind_kmh',
-        'Basel Shortwave Radiation': 'Radiation_Wm2'
+        'time': 'Timestamp',
+        'temperature_2m (°C)': 'Temp_C',
+        'wind_speed_10m (m/s)': 'Wind_ms',
+        'shortwave_radiation (W/m²)': 'Radiation_Wm2'
     })
-    data = data[['Timestamp', 'Temp_C', 'Wind_kmh', 'Radiation_Wm2']]
 
-    data['Timestamp'] = pd.to_datetime(data['Timestamp'])  # Convert to datetime
-    data['Wind_ms'] = data['Wind_kmh'] * (1000 / 3600)  # Convert km/h to m/s
-    data = data.set_index('Timestamp')
-    data = data.drop(columns=['Wind_kmh'])  # Drop original km/h column
+    data['Timestamp'] = pd.to_datetime(data['Timestamp'], unit='s')  # Convert to datetime
+    data = data.set_index('Timestamp')  # Set timestamp as index
 
-    print("--- Data Loaded and Cleaned (first 5 rows) ---")
+    print("--- Data Loaded Successfully ---")
     print(data.head())
     return data
+
 
 def calculate_detrend(data):
     data['hour'] = data.index.hour
@@ -60,6 +62,7 @@ def calculate_detrend(data):
 
     return data
 
+
 def plot_histogram(residuals, variable_name, unit):
     plt.figure(figsize=(10, 6))
     residuals.hist(bins=100, density=True, alpha=0.7)
@@ -70,6 +73,7 @@ def plot_histogram(residuals, variable_name, unit):
     plt.savefig(filename)
     plt.close()
     print(f"Saved {filename}")
+
 
 def analyze_bic_for_gmm(residuals, max_k, variable_name, output_dir):
     print(f"\nAnalyzing BIC for GMM components for {variable_name}...")
@@ -116,8 +120,9 @@ def analyze_bic_for_gmm(residuals, max_k, variable_name, output_dir):
 
     return bic_scores
 
+
 def main():
-    CSV_FILE = 'meteoblue_data_2020_2024.csv'
+    CSV_FILE = 'open-meteo.csv'
     MAX_K_COMPONENTS = 8
 
     # Create output directory
@@ -140,6 +145,7 @@ def main():
     print("\n--- BIC Analysis Finished ---")
     print("Saved: hourly_trend.csv")
     print(f"Saved analysis plots in: {PLOT_DIR}")
+
 
 if __name__ == "__main__":
     main()

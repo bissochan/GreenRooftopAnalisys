@@ -7,9 +7,9 @@ import sys
 import os
 
 OPTIMAL_K = {
-    'Radiation': 3,     # Check plot ./plots/radiation_bic.png
-    'Temperature': 2,    # Check plot ./plots/temperature_bic.png
-    'WindSpeed': 4       # Check plot ./plots/wind_speed_bic.png
+    'Radiation': 6,     # Check plot ./plots/radiation_bic.png
+    'Temperature': 3,    # Check plot ./plots/temperature_bic.png
+    'WindSpeed': 2       # Check plot ./plots/wind_speed_bic.png
 }
 PLOT_DIR = 'plots'
 PKL_DIR = 'pkl_models'
