@@ -3,10 +3,10 @@ import numpy as np
 class RoofBlock:
     """Block for roof temperature evolution."""
 
-    def __init__(self, T_init, alpha, Q_evap, C, roof_funcs, params):
+    def __init__(self, T_init, alpha, K_evap, C, roof_funcs, params):
         self.T = T_init
         self.alpha = alpha
-        self.Q_evap = Q_evap
+        self.K_evap = K_evap
         self.C = C
         self.f = roof_funcs
         self.p = params
@@ -26,7 +26,7 @@ class RoofBlock:
 
         T_new = self.f.update_roof_euler(
             self.T, T_air, self.alpha, self.G,
-            self.Q_evap, self.C, self.wind, self.p.dt_sub
+            self.K_evap, self.C, self.wind, self.p.dt_sub
         )
 
         dT = np.clip(T_new - self.T, -self.p.max_step_roof, self.p.max_step_roof)

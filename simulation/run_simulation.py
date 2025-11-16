@@ -24,7 +24,7 @@ wind_series = df["Wind_Trend"].values
 roof_cement_block = RoofBlock(
     T_init=T_env_series[0],
     alpha=p.alpha_cement,
-    Q_evap=0.0,
+    K_evap=0.0,
     C=p.C_cement,
     roof_funcs=roof_model,
     params=p
@@ -33,7 +33,7 @@ roof_cement_block = RoofBlock(
 roof_green_block = RoofBlock(
     T_init=T_env_series[0],
     alpha=p.alpha_green,
-    Q_evap=p.Q_evap_green,
+    K_evap=p.k_evap_green,
     C=p.C_green,
     roof_funcs=roof_model,
     params=p
@@ -143,6 +143,7 @@ plt.savefig("sensor_facade_temperatures.png")
 plt.figure(figsize=(10,5))
 plt.plot(Rise_cement, color='tomato', label="Rise Concrete (m)")
 plt.plot(Rise_green, color='seagreen', label="Rise Green (m)")
+plt.plot(H_mix_arr, '--', color='gray', label="Mixing Height (m) on Roof")
 plt.plot(Floors_affected_cement, '--', color='orangered', label="Floors Affected Concrete")
 plt.plot(Floors_affected_green, '--', color='limegreen', label="Floors Affected Green")
 plt.xlabel("Hour")
