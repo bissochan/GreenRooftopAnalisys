@@ -63,6 +63,44 @@ def calculate_detrend(data):
     return data
 
 
+def calculate_tuning_params(data):
+    # Simple AR(1) tuning parameter extraction + bias estimation
+    variables = [
+        ('Temp_Residual', 'temp'),
+        ('Wind_Residual', 'wind'),
+        ('Rad_Residual',  'rad')
+    ]
+
+    results = {}
+
+    for col, key in variables:
+        series = data[col].dropna()
+        phi = series.autocorr(lag=1)
+
+        if abs(phi) >= 1:
+            sigma = 0.0
+        else:
+            sigma = np.sqrt(1 - phi**2)
+
+        daily_means = series.resample('D').mean()
+        bias = daily_means.std()
+
+        results[key] = {
+            'phi': round(phi, 4),
+            'sigma': round(sigma, 4),
+            'bias': round(bias, 4)
+        }
+
+    out_path = os.path.join(CSV_DIR, 'tuning_params.csv')
+    df = pd.DataFrame(results).T
+    df.to_csv(out_path)
+
+    print("\n--- Tuning parameters saved to tuning_params.csv ---")
+    print(df)
+    print()
+
+    return results
+
 def plot_histogram(residuals, variable_name, unit):
     plt.figure(figsize=(10, 6))
     residuals.hist(bins=100, density=True, alpha=0.7)
@@ -131,6 +169,8 @@ def main():
 
     cleaned_data = load_and_clean_data(CSV_FILE)
     detrended_data = calculate_detrend(cleaned_data)
+
+    calculate_tuning_params(detrended_data)
 
     # Plot initial analysis graphs
     plot_histogram(detrended_data['Rad_Residual'], 'Radiation', 'W/m²')
