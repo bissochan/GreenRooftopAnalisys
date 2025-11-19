@@ -9,11 +9,19 @@ project for the course of Simulation &amp; Performance Evaluation 2024/2025, don
 
 Set up parameters in `build_model.py` before running.
  ```bash
+  cd data
   python build_model.py
  ```
 
+### Run one-day weather simulator
+From the project root:
+```bash
+  python weather_simulator.py
+ ```
+
 ### Run simulation
+From the project root:
+
  ```bash
-  cd ..
   python simulation/run_simulation.py
  ```
