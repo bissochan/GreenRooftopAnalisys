@@ -12,11 +12,11 @@ from blocks.master import Master
 # ============================================================
 # Load input CSV
 # ============================================================
-CSV_PATH = "data/csv/hourly_trend.csv"
+CSV_PATH = "data/csv/meteo_hourly_trend.csv"
 df = pd.read_csv(CSV_PATH)
-radiation_series = df["Rad_Trend"].values
-T_env_series = df["Temp_Trend"].values
-wind_series = df["Wind_Trend"].values
+radiation_series = df["Radiation_Wm2_Trend"].values
+T_env_series = df["Temp_C_Trend"].values
+wind_series = df["Wind_ms_Trend"].values
 
 # ============================================================
 # Initialize blocks
