@@ -11,10 +11,10 @@ OPTIMAL_K = {
     'Radiation': 6,
     'Temperature': 3,
     'WindSpeed': 2,
-    'CO2': 3,
-    'PM10': 2,
-    'PM2_5': 2,
-    'CO': 2
+    'CO2': 4,
+    'PM10': 4,
+    'PM2_5': 4,
+    'CO': 3
 }
 
 PLOT_DIR = 'plots'
