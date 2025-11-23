@@ -152,8 +152,8 @@ def simulate_physics(weather):
         "H_mix": [],
         "T_air_cement": [],
         "T_air_green": [],
-        "T_air_loc_cement": [],
-        "T_air_loc_green": [],
+        "T_air_fac_cement": [],
+        "T_air_fac_green": [],
         "Rise_cement": [],
         "Rise_green": [],
         "Floors_cement": [],
@@ -167,8 +167,8 @@ def simulate_physics(weather):
         H_mix = out["H_mix"]
         T_air_c = out["T_air_c"]
         T_air_g = out["T_air_g"]
-        T_air_loc_c = out["T_air_loc_c"]
-        T_air_loc_g = out["T_air_loc_g"]
+        T_air_fac_c = out["T_air_fac_c"]
+        T_air_fac_g = out["T_air_fac_g"]
         Rise_c = out["Rise_c"]
         Rise_g = out["Rise_g"]
         Floors_c = out["Floors_c"]
@@ -179,8 +179,8 @@ def simulate_physics(weather):
         results["H_mix"].append(H_mix)
         results["T_air_cement"].append(T_air_c)
         results["T_air_green"].append(T_air_g)
-        results["T_air_loc_cement"].append(T_air_loc_c)
-        results["T_air_loc_green"].append(T_air_loc_g)
+        results["T_air_fac_cement"].append(T_air_fac_c)
+        results["T_air_fac_green"].append(T_air_fac_g)
         results["Rise_cement"].append(Rise_c)
         results["Rise_green"].append(Rise_g)
         results["Floors_cement"].append(Floors_c)
