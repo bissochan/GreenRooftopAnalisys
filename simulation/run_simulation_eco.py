@@ -6,11 +6,14 @@ import os, json, pickle
 # ----------------------------
 # PATHS
 # ----------------------------
-PKL_DIR = "data\\pkl_models"
-CSV_DIR = "data\\csv"
-PLOT_DIR = "data\\plots"
+DATA_DIR = os.path.join("..", "data")
+PKL_DIR = os.path.join(DATA_DIR, "pkl_models")
+CSV_DIR = os.path.join(DATA_DIR, "csv")
+
+RESULT_DIR = "eco_results"
+os.makedirs(RESULT_DIR, exist_ok=True)
+PLOT_DIR = os.path.join(RESULT_DIR, "plots")
 os.makedirs(PLOT_DIR, exist_ok=True)
-os.makedirs(CSV_DIR, exist_ok=True)
 
 
 # ----------------------------
@@ -86,7 +89,7 @@ def run_ecology_simulation(hours=24):
     # Load all GMM residual models
     gmm_rad = load_gmm("radiation")
     gmm_temp = load_gmm("temperature")
-    gmm_wind = load_gmm("windspeed")
+    gmm_wind = load_gmm("wind_speed")
     gmm_co2   = load_gmm("co2")
     gmm_pm10  = load_gmm("pm10")
     gmm_pm25  = load_gmm("pm2_5")
@@ -137,7 +140,7 @@ def run_ecology_simulation(hours=24):
         })
 
     df = pd.DataFrame(results)
-    df.to_csv(os.path.join(CSV_DIR, "ecology_timeseries.csv"), index=False)
+    df.to_csv(os.path.join(RESULT_DIR, "ecology_timeseries.csv"), index=False)
 
     summary = {
         "CO2_removed_total_g": df["CO2_Removed_g"].sum(),
@@ -147,7 +150,7 @@ def run_ecology_simulation(hours=24):
         "O2_produced_total_g": df["O2_Produced_g"].sum()
     }
 
-    with open(os.path.join(CSV_DIR, "ecology_summary.json"), "w") as f:
+    with open(os.path.join(RESULT_DIR, "ecology_summary.json"), "w") as f:
         json.dump(summary, f, indent=4)
 
     return df, summary

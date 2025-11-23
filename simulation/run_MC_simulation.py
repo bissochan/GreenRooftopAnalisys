@@ -26,16 +26,16 @@ DATA_DIR = os.path.join("..", "data")
 CSV_DIR = os.path.join(DATA_DIR, "csv")
 PKL_DIR = os.path.join(DATA_DIR, "pkl_models")
 
-TREND_FILE = os.path.join(CSV_DIR, "hourly_trend.csv")
-TUNING_FILE = os.path.join(CSV_DIR, "tuning_params.csv")
+TREND_FILE = os.path.join(CSV_DIR, "meteo_hourly_trend.csv")
+TUNING_FILE = os.path.join(CSV_DIR, "meteo_tuning_params.csv")
 
 try:
     df_trend = pd.read_csv(TREND_FILE)
     N_TRENDS = len(df_trend)
     trends = {
-        "temp": df_trend["Temp_Trend"].values,
-        "wind": df_trend["Wind_Trend"].values,
-        "rad": df_trend["Rad_Trend"].values,
+        "temp": df_trend["Temp_C_Trend"].values,
+        "wind": df_trend["Wind_ms_Trend"].values,
+        "rad": df_trend["Radiation_Wm2_Trend"].values,
     }
 except FileNotFoundError:
     sys.exit(f"Error: Trend file not found at {TREND_FILE}")
@@ -47,23 +47,23 @@ except FileNotFoundError:
 
 PARAMS = {
     "temp": {
-        "phi": tuning_df.loc["temp", "phi"],
-        "sigma": tuning_df.loc["temp", "sigma"],
-        "bias_std": tuning_df.loc["temp", "bias"],
+        "phi": tuning_df.loc["Temperature_Residual", "phi"],
+        "sigma": tuning_df.loc["Temperature_Residual", "sigma"],
+        "bias_std": tuning_df.loc["Temperature_Residual", "bias"],
         "max_err": 3.0,
         "file": "temperature_gmm.pkl",
     },
     "wind": {
-        "phi": tuning_df.loc["wind", "phi"],
-        "sigma": tuning_df.loc["wind", "sigma"],
-        "bias_std": tuning_df.loc["wind", "bias"],
+        "phi": tuning_df.loc["Wind_Speed_Residual", "phi"],
+        "sigma": tuning_df.loc["Wind_Speed_Residual", "sigma"],
+        "bias_std": tuning_df.loc["Wind_Speed_Residual", "bias"],
         "max_err": 4.0,
         "file": "wind_speed_gmm.pkl",
     },
     "rad": {
-        "phi": tuning_df.loc["rad", "phi"],
-        "sigma": tuning_df.loc["rad", "sigma"],
-        "bias_std": tuning_df.loc["rad", "bias"],
+        "phi": tuning_df.loc["Radiation_Residual", "phi"],
+        "sigma": tuning_df.loc["Radiation_Residual", "sigma"],
+        "bias_std": tuning_df.loc["Radiation_Residual", "bias"],
         "max_err": None,
         "file": "radiation_gmm.pkl",
     },
@@ -79,6 +79,8 @@ for key, config in PARAMS.items():
 # ===========================
 # Weather generator
 # ===========================
+
+
 def generate_stochastic_day():
     """Generate one full weather day based on stochastic AR(1) models."""
     n_samples = N_TRENDS
@@ -122,6 +124,8 @@ def generate_stochastic_day():
 # ===========================
 # Physics simulator
 # ===========================
+
+
 def simulate_physics(weather):
     """Run the physical simulation for a full day."""
     T_env = weather["temp"]
@@ -145,6 +149,11 @@ def simulate_physics(weather):
     results = {
         "T_cement": [],
         "T_green": [],
+        "H_mix": [],
+        "T_air_cement": [],
+        "T_air_green": [],
+        "T_air_loc_cement": [],
+        "T_air_loc_green": [],
         "Rise_cement": [],
         "Rise_green": [],
         "Floors_cement": [],
@@ -152,19 +161,38 @@ def simulate_physics(weather):
     }
 
     for t in range(n):
-        T_c, T_g, _, _, _, facade_out = master.do_step(T_env[t], rad[t], wind[t])
+        out = master.do_step(T_env[t], rad[t], wind[t])
+        T_c = out["T_c"]
+        T_g = out["T_g"]
+        H_mix = out["H_mix"]
+        T_air_c = out["T_air_c"]
+        T_air_g = out["T_air_g"]
+        T_air_loc_c = out["T_air_loc_c"]
+        T_air_loc_g = out["T_air_loc_g"]
+        Rise_c = out["Rise_c"]
+        Rise_g = out["Rise_g"]
+        Floors_c = out["Floors_c"]
+        Floors_g = out["Floors_g"]
+
         results["T_cement"].append(T_c)
         results["T_green"].append(T_g)
-        results["Rise_cement"].append(facade_out[2])
-        results["Rise_green"].append(facade_out[3])
-        results["Floors_cement"].append(facade_out[4])
-        results["Floors_green"].append(facade_out[5])
+        results["H_mix"].append(H_mix)
+        results["T_air_cement"].append(T_air_c)
+        results["T_air_green"].append(T_air_g)
+        results["T_air_loc_cement"].append(T_air_loc_c)
+        results["T_air_loc_green"].append(T_air_loc_g)
+        results["Rise_cement"].append(Rise_c)
+        results["Rise_green"].append(Rise_g)
+        results["Floors_cement"].append(Floors_c)
+        results["Floors_green"].append(Floors_g)
 
     return results
 
 # ===========================
 # Monte Carlo simulation
 # ===========================
+
+
 def run_monte_carlo(n_sims=100):
     """Run Monte Carlo simulations and save all outputs."""
     mc_results = []
@@ -177,30 +205,26 @@ def run_monte_carlo(n_sims=100):
         daily_weather = generate_stochastic_day()
 
         # Save weather sample
-        df_day = pd.DataFrame(daily_weather)
-        df_day["run_id"] = run
-        weather_samples.append(df_day)
+        weather_samples.append(pd.DataFrame({
+            "run_id": run,
+            **daily_weather
+        }))
 
         daily_res = simulate_physics(daily_weather)
 
-        mc_results.append({
+        # Save simulation results
+        mc_results.append(pd.DataFrame({
             "run_id": run,
-            "max_rise_cement": max(daily_res["Rise_cement"]),
-            "max_rise_green": max(daily_res["Rise_green"]),
-            "max_temp_cement": max(daily_res["T_cement"]),
-            "max_temp_green": max(daily_res["T_green"]),
-            "avg_floors_saved": (
-                np.mean(daily_res["Floors_cement"]) -
-                np.mean(daily_res["Floors_green"])
-            )
-        })
+            "hour": range(len(daily_res["T_cement"])),
+            **daily_res
+        }))
 
     # Save weather samples
     df_weather = pd.concat(weather_samples, ignore_index=True)
     df_weather.to_csv(os.path.join(RESULT_DIR, "weather_samples.csv"), index=False)
 
     # Save MC results
-    df_mc = pd.DataFrame(mc_results)
+    df_mc = pd.concat(mc_results, ignore_index=True)
     df_mc.to_csv(os.path.join(RESULT_DIR, "simulation_results.csv"), index=False)
 
     return df_mc
@@ -208,11 +232,14 @@ def run_monte_carlo(n_sims=100):
 # ===========================
 # Main
 # ===========================
+
+
 def main():
     print("Starting Monte Carlo simulation...")
     results = run_monte_carlo()
     print("Simulation complete.")
     print(results.head())
+
 
 if __name__ == "__main__":
     main()

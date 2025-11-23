@@ -1,6 +1,7 @@
 import numpy as np
 from .parameters import *
 
+
 def compute_facade_effects(T_air_end_c, T_air_end_g, T_env, wind, H_mix):
     """Compute facade air temperature and buoyant rise."""
     tau = D / max(wind, wind_eps)
@@ -21,4 +22,11 @@ def compute_facade_effects(T_air_end_c, T_air_end_g, T_env, wind, H_mix):
     floors_c = np.ceil(rise_c / h_floor)
     floors_g = np.ceil(rise_g / h_floor)
 
-    return T_air_loc_c, T_air_loc_g, rise_c, rise_g, floors_c, floors_g
+    return {
+        "T_air_loc_c": T_air_loc_c,
+        "T_air_loc_g": T_air_loc_g,
+        "rise_c": rise_c,
+        "rise_g": rise_g,
+        "floors_c": floors_c,
+        "floors_g": floors_g
+    }
