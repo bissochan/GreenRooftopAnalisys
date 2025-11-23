@@ -1,7 +1,10 @@
 .venv
 __pycache__/
 
+trash/
+
 data/csv/
 data/pkl_models/
 data/plots/
-trash/
+
+simulation/csv_results/

@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import tempfile
 import shutil
@@ -18,6 +19,23 @@ SEED = 42                     # Random seed per riproducibilità
 
 GMM_DIR = 'data\pkl_models'        # cartella dove hai salvato i modelli GMM
 np.random.seed(SEED)
+
+# ==============================
+# STAMPA TUTTE LE VARIABILI (POSIZIONE CORRETTA)
+# ==============================
+print("Caricamento descrizione modello per ispezione...")
+# Carichiamo la descrizione UNA SOLA VOLTA, qui
+model_description = read_model_description(FMU_FILENAME)
+
+print("=" * 30)
+print("Variabili disponibili nell'FMU:")
+print("=" * 30)
+for variable in model_description.modelVariables:
+    # Stampa solo le variabili di tipo 'Real' (numeri decimali) che ci interessano
+    if variable.type == 'Real':
+        print(f"Nome: {variable.name:<40} | Causalità: {variable.causality}")
+
+print("=" * 30, "\n")
 
 # ==============================
 # FUNZIONE: esegui una simulazione FMU
@@ -52,6 +70,8 @@ def run_fmu_with_noise(SolarRadiation, AmbientTemp, WindSpeed):
         fmu.setReal([vrs['AmbientTemp']], [AmbientTemp[int(time/STEP_SIZE)]])
         fmu.setReal([vrs['WindSpeed']], [WindSpeed[int(time/STEP_SIZE)]])
 
+        print(f"Simulazione FMU - Tempo: {time:.1f}s | SolarRadiation: {SolarRadiation[int(time/STEP_SIZE)]:.2f} | AmbientTemp: {AmbientTemp[int(time/STEP_SIZE)]:.2f} | WindSpeed: {WindSpeed[int(time/STEP_SIZE)]:.2f}")
+
         # Esegui un passo
         fmu.doStep(currentCommunicationPoint=time, communicationStepSize=STEP_SIZE)
         y = fmu.getReal([vrs['SensorTemp']])[0]
@@ -82,6 +102,15 @@ gmm_temp = load_gmm('temperature')
 gmm_wind = load_gmm('wind_speed')
 
 # ==============================
+# CARICA I HOUR TRENDS
+# ==============================
+trend_df = pd.read_csv('data/csv/hourly_trend.csv', index_col='hour')
+
+trend_rad_14h = trend_df.loc[14, 'Rad_Trend']
+trend_temp_14h = trend_df.loc[14, 'Temp_Trend']
+trend_wind_14h = trend_df.loc[14, 'Wind_Trend']
+
+# ==============================
 # SIMULAZIONE MONTE CARLO
 # ==============================
 times = None
@@ -96,9 +125,9 @@ for i in range(N_RUNS):
     wind_noise = gmm_wind.sample(int(T_STOP / STEP_SIZE) + 1)[0].flatten()
 
     # Crea profili temporali realistici (base + rumore)
-    base_rad = np.full_like(rad_noise, 800.0)   # costante media
-    base_temp = np.full_like(temp_noise, 25.0)
-    base_wind = np.full_like(wind_noise, 2.0)
+    base_rad = np.full_like(rad_noise, trend_rad_14h)
+    base_temp = np.full_like(temp_noise, trend_temp_14h)
+    base_wind = np.full_like(wind_noise, trend_wind_14h)
 
     SolarRadiation = base_rad + rad_noise
     AmbientTemp = base_temp + temp_noise

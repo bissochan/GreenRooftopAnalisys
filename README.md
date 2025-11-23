@@ -13,15 +13,10 @@ Set up parameters in `build_model.py` before running.
   python build_model.py
  ```
 
-### Run one-day weather simulator
-From the project root:
-```bash
-  python weather_simulator.py
- ```
-
-### Run simulation
+### Run Monte Carlo Simulation
 From the project root:
 
  ```bash
-  python simulation/run_simulation.py
+  cd simulation
+  python run_MC_simulation.py
  ```
