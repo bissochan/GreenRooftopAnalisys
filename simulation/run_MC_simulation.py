@@ -108,12 +108,11 @@ def generate_stochastic_day():
 
         # Wind
         raw_wind = trends["wind"][i] + bias["wind"] + residuals["wind"]
-        output["wind"].append(max(0.5, raw_wind))
+        output["wind"].append(max(0.05, raw_wind))
 
         # Radiation
         if trends["rad"][i] < 5:
             rad_val = 0.0
-            residuals["rad"] = 0.0
         else:
             raw_rad = trends["rad"][i] + bias["rad"] + residuals["rad"]
             rad_val = np.clip(raw_rad, 0, 1400)
@@ -207,6 +206,7 @@ def run_monte_carlo(n_sims=100):
         # Save weather sample
         weather_samples.append(pd.DataFrame({
             "run_id": run,
+            "hour": range(len(daily_weather["temp"])),
             **daily_weather
         }))
 
