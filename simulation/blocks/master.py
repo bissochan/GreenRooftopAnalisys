@@ -30,4 +30,8 @@ class Master:
         self.facade.do_step()
         facade_out = self.facade.get_outputs()
 
-        return T_c, T_g, H_mix, T_air_c, T_air_g, facade_out
+        Q_evap_c_Wm2, et_c_kg_m2_s = self.roof_c.get_evaporation()
+        Q_evap_g_Wm2, et_g_kg_m2_s = self.roof_g.get_evaporation()
+
+        return T_c, T_g, H_mix, T_air_c, T_air_g, facade_out, \
+               (Q_evap_c_Wm2, et_c_kg_m2_s), (Q_evap_g_Wm2, et_g_kg_m2_s)

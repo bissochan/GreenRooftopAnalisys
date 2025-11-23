@@ -1,3 +1,4 @@
+# --- analyze_data.py aggiornato ---
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -9,97 +10,116 @@ PLOT_DIR = 'plots'
 CSV_DIR = 'csv'
 
 
-def load_and_clean_data(csv_path):
-    import pandas as pd
-
+def load_and_clean_data(csv_path, data_type='meteo'):
     try:
-        data = pd.read_csv(csv_path, skiprows=3, header=0)  # Skip first 3 rows of metadata
+        data = pd.read_csv(csv_path, skiprows=3, header=0)
     except FileNotFoundError:
         print(f"Error: Data file '{csv_path}' not found.")
         sys.exit()
 
-    # Rename to internal names
-    data = data.rename(columns={
-        'time': 'Timestamp',
-        'temperature_2m (°C)': 'Temp_C',
-        'wind_speed_10m (m/s)': 'Wind_ms',
-        'shortwave_radiation (W/m²)': 'Radiation_Wm2'
-    })
+    if data_type == 'meteo':
+        data = data.rename(columns={
+            'time': 'Timestamp',
+            'temperature_2m (°C)': 'Temp_C',
+            'wind_speed_10m (m/s)': 'Wind_ms',
+            'shortwave_radiation (W/m²)': 'Radiation_Wm2'
+        })
+        data['Timestamp'] = pd.to_datetime(data['Timestamp'], unit='s')
+        data = data.set_index('Timestamp')
+    elif data_type == 'air_quality':
+        data = data.rename(columns={
+            'time': 'Timestamp',
+            'carbon_dioxide (ppm)': 'CO2',
+            'pm10 (μg/m³)': 'PM10',
+            'pm2_5 (μg/m³)': 'PM2_5',
+            'carbon_monoxide (μg/m³)': 'CO'
+        })
+        data['Timestamp'] = pd.to_datetime(data['Timestamp'])
+        data = data.set_index('Timestamp')
+    else:
+        print("Unknown data type")
+        sys.exit()
 
-    data['Timestamp'] = pd.to_datetime(data['Timestamp'], unit='s')  # Convert to datetime
-    data = data.set_index('Timestamp')  # Set timestamp as index
-
-    print("--- Data Loaded Successfully ---")
+    print(f"--- {data_type} Data Loaded Successfully ---")
     print(data.head())
     return data
 
 
-def calculate_detrend(data):
+def calculate_detrend(data, data_type='meteo'):
     data['hour'] = data.index.hour
-    hourly_trend = data.groupby('hour')[['Temp_C', 'Wind_ms', 'Radiation_Wm2']].mean()
 
-    hourly_trend = hourly_trend.rename(columns={
-        'Temp_C': 'Temp_Trend',
-        'Wind_ms': 'Wind_Trend',
-        'Radiation_Wm2': 'Rad_Trend'
-    })
+    if data_type == 'meteo':
+        columns = ['Temp_C', 'Wind_ms', 'Radiation_Wm2']
+        # Mappa dei nomi dei residui coerenti con il codice originale
+        residual_name_map = {
+            'Temp_C': 'Temperature_Residual',
+            'Wind_ms': 'WindSpeed_Residual',
+            'Radiation_Wm2': 'Radiation_Residual'
+        }
 
+    else:
+        columns = ['CO2', 'PM10', 'PM2_5', 'CO']
+        residual_name_map = {col: f"{col}_Residual" for col in columns}
+
+    # Calcolo trend orario
+    hourly_trend = data.groupby('hour')[columns].mean()
+    trend_columns = {col: f"{col}_Trend" for col in columns}
+    hourly_trend = hourly_trend.rename(columns=trend_columns)
+
+    # Join trend al dataframe
     data = data.join(hourly_trend, on='hour')
-    data['Temp_Residual'] = data['Temp_C'] - data['Temp_Trend']
-    data['Wind_Residual'] = data['Wind_ms'] - data['Wind_Trend']
-    data['Rad_Residual'] = data['Radiation_Wm2'] - data['Rad_Trend']
 
-    # Save the trend data and residual data
-    hourly_trend.to_csv(os.path.join(CSV_DIR, 'hourly_trend.csv'))
-    print("\n--- Deterministic 24-hour Trend (Saved to hourly_trend.csv) ---")
-    print(hourly_trend.head())
+    # Calcolo residui
+    for col in columns:
+        residual_col = residual_name_map[col]
+        data[residual_col] = data[col] - data[f"{col}_Trend"]
 
-    residual_df = data[['Temp_Residual', 'Wind_Residual', 'Rad_Residual']]
-    residual_filename = os.path.join(CSV_DIR, 'calculated_residuals.csv')
-    residual_df.to_csv(residual_filename)
-    print(f"\n--- Calculated Residuals (Saved to {residual_filename}) ---")
-    print(residual_df.head())
+        # Per CO2 dell'air_quality, ignoriamo i NaN
+        if data_type == 'air_quality' and col == 'CO2':
+            data[residual_col] = data[residual_col].dropna()
+
+    # Salvataggio file CSV
+    trend_file = os.path.join(CSV_DIR, f'{data_type}_hourly_trend.csv')
+    residual_file = os.path.join(CSV_DIR, f'{data_type}_residuals.csv')
+    hourly_trend.to_csv(trend_file)
+    data[[residual_name_map[col] for col in columns]].to_csv(residual_file)
+
+    print(f"\n--- {data_type} Trend Saved to {trend_file} ---")
+    print(f"--- {data_type} Residuals Saved to {residual_file} ---")
 
     return data
 
 
-def calculate_tuning_params(data):
-    # Simple AR(1) tuning parameter extraction + bias estimation
-    variables = [
-        ('Temp_Residual', 'temp'),
-        ('Wind_Residual', 'wind'),
-        ('Rad_Residual',  'rad')
-    ]
+
+def calculate_tuning_params(data, data_type='meteo'):
+    if data_type == 'meteo':
+        variables = ['Temperature_Residual', 'WindSpeed_Residual', 'Radiation_Residual']
+    else:
+        variables = ['CO2_Residual', 'PM10_Residual', 'PM2_5_Residual', 'CO_Residual']
 
     results = {}
 
-    for col, key in variables:
+    for col in variables:
         series = data[col].dropna()
         phi = series.autocorr(lag=1)
-
         if abs(phi) >= 1:
             sigma = 0.0
         else:
             sigma = np.sqrt(1 - phi**2)
-
         daily_means = series.resample('D').mean()
         bias = daily_means.std()
-
-        results[key] = {
+        results[col] = {
             'phi': round(phi, 4),
             'sigma': round(sigma, 4),
             'bias': round(bias, 4)
         }
 
-    out_path = os.path.join(CSV_DIR, 'tuning_params.csv')
-    df = pd.DataFrame(results).T
-    df.to_csv(out_path)
-
-    print("\n--- Tuning parameters saved to tuning_params.csv ---")
-    print(df)
-    print()
-
+    out_file = os.path.join(CSV_DIR, f'{data_type}_tuning_params.csv')
+    pd.DataFrame(results).T.to_csv(out_file)
+    print(f"\n--- {data_type} Tuning Parameters Saved to {out_file} ---")
+    print(pd.DataFrame(results).T)
     return results
+
 
 def plot_histogram(residuals, variable_name, unit):
     plt.figure(figsize=(10, 6))
@@ -116,75 +136,65 @@ def plot_histogram(residuals, variable_name, unit):
 def analyze_bic_for_gmm(residuals, max_k, variable_name, output_dir):
     print(f"\nAnalyzing BIC for GMM components for {variable_name}...")
     residuals = residuals.dropna().values
-
-    # Filter out near-zero residuals for Radiation
-    if variable_name == 'Radiation':
-        print("Filtering Radiation residuals: keeping only non-zero daytime noise for BIC analysis.")
-        residuals = residuals[np.abs(residuals) > 0.1]
-
     if len(residuals) == 0:
-        print(f"Warning: No valid residuals left for {variable_name} after filtering. Skipping BIC analysis.")
+        print(f"Warning: No valid residuals left for {variable_name}. Skipping BIC analysis.")
         return []
 
     residuals_reshaped = residuals.reshape(-1, 1)
     k_range = range(1, max_k + 1)
     bic_scores = []
-
     for k in k_range:
         try:
             gmm = GaussianMixture(n_components=k, random_state=42)
             gmm.fit(residuals_reshaped)
-            bic = gmm.bic(residuals_reshaped)
-            bic_scores.append(bic)
-            print(f"  k={k}: BIC = {bic:.2f}")
-        except ValueError as e:
-            print(f"  k={k}: Error fitting GMM - {e}. Skipping this k.")
+            bic_scores.append(gmm.bic(residuals_reshaped))
+        except ValueError:
             bic_scores.append(np.inf)
 
-    # Plot BIC scores
     plt.figure(figsize=(10, 5))
     plt.plot(k_range, bic_scores, 'o-')
     plt.xlabel('Number of Components (k)')
     plt.ylabel('BIC Score')
     plt.title(f'BIC Model Selection for {variable_name} Residuals')
-    valid_k = [k for k, score in zip(k_range, bic_scores) if score != np.inf]
-    if valid_k:
-        plt.xticks(valid_k)
     plt.grid(True)
     bic_plot_filename = os.path.join(output_dir, f'{variable_name.lower().replace(" ", "_")}_bic.png')
     plt.savefig(bic_plot_filename)
     plt.close()
     print(f"Saved BIC plot: {bic_plot_filename}")
-
     return bic_scores
 
 
 def main():
-    CSV_FILE = 'open-meteo.csv'
     MAX_K_COMPONENTS = 8
-
-    # Create output directory
     os.makedirs(PLOT_DIR, exist_ok=True)
     os.makedirs(CSV_DIR, exist_ok=True)
 
-    cleaned_data = load_and_clean_data(CSV_FILE)
-    detrended_data = calculate_detrend(cleaned_data)
+    # METEO
+    meteo_data = load_and_clean_data('open-meteo.csv', data_type='meteo')
+    meteo_detrended = calculate_detrend(meteo_data, data_type='meteo')
+    calculate_tuning_params(meteo_detrended, data_type='meteo')
+# METEO
+    plot_histogram(meteo_detrended['Radiation_Residual'], 'Radiation', 'W/m²')
+    plot_histogram(meteo_detrended['Temperature_Residual'], 'Temperature', '°C')
+    plot_histogram(meteo_detrended['WindSpeed_Residual'], 'Wind Speed', 'm/s')
+    
+    analyze_bic_for_gmm(meteo_detrended['Radiation_Residual'], MAX_K_COMPONENTS, 'Radiation', PLOT_DIR)
+    analyze_bic_for_gmm(meteo_detrended['Temperature_Residual'], MAX_K_COMPONENTS, 'Temperature', PLOT_DIR)
+    analyze_bic_for_gmm(meteo_detrended['WindSpeed_Residual'], MAX_K_COMPONENTS, 'Wind Speed', PLOT_DIR)
 
-    calculate_tuning_params(detrended_data)
 
-    # Plot initial analysis graphs
-    plot_histogram(detrended_data['Rad_Residual'], 'Radiation', 'W/m²')
-    plot_histogram(detrended_data['Temp_Residual'], 'Temperature', '°C')
-    plot_histogram(detrended_data['Wind_Residual'], 'Wind Speed', 'm/s')
-
-    # Run BIC analysis
-    analyze_bic_for_gmm(detrended_data['Rad_Residual'], MAX_K_COMPONENTS, 'Radiation', PLOT_DIR)
-    analyze_bic_for_gmm(detrended_data['Temp_Residual'], MAX_K_COMPONENTS, 'Temperature', PLOT_DIR)
-    analyze_bic_for_gmm(detrended_data['Wind_Residual'], MAX_K_COMPONENTS, 'Wind Speed', PLOT_DIR)
-
-    print("\n--- BIC Analysis Finished ---")
-    print("Saved: hourly_trend.csv")
-    print(f"Saved analysis plots in: {PLOT_DIR}")
+    # AIR QUALITY
+    air_data = load_and_clean_data('air_quality.csv', data_type='air_quality')
+    air_detrended = calculate_detrend(air_data, data_type='air_quality')
+    calculate_tuning_params(air_detrended, data_type='air_quality')
+    plot_histogram(air_detrended['CO2_Residual'], 'CO2', 'ppm')
+    plot_histogram(air_detrended['PM10_Residual'], 'PM10', 'μg/m³')
+    plot_histogram(air_detrended['PM2_5_Residual'], 'PM2.5', 'μg/m³')
+    plot_histogram(air_detrended['CO_Residual'], 'CO', 'μg/m³')
+    analyze_bic_for_gmm(air_detrended['CO2_Residual'], MAX_K_COMPONENTS, 'CO2', PLOT_DIR)
+    analyze_bic_for_gmm(air_detrended['PM10_Residual'], MAX_K_COMPONENTS, 'PM10', PLOT_DIR)
+    analyze_bic_for_gmm(air_detrended['PM2_5_Residual'], MAX_K_COMPONENTS, 'PM2.5', PLOT_DIR)
+    analyze_bic_for_gmm(air_detrended['CO_Residual'], MAX_K_COMPONENTS, 'CO', PLOT_DIR)
 
 
 if __name__ == "__main__":

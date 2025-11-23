@@ -37,3 +37,27 @@ max_step_roof = 30.0      # Max solver step for roof (s)
 h_c_max = 100.0           # Max convective coefficient
 
 SPIN_CYCLES = 2           # Warm-up cycles for model stabilization
+
+# ----------------------
+# ECOLOGICAL PARAMETERS (defaults follow earlier discussion/demo)
+# ----------------------
+# Deposition velocities (m/s) for PM2.5
+Vd_pm25_low = 0.002
+Vd_pm25_typ = 0.0064
+Vd_pm25_high = 0.01
+
+# Deposition velocities (m/s) for PM10
+Vd_pm10_low = 0.005
+Vd_pm10_typ = 0.01
+Vd_pm10_high = 0.02
+
+# Carbon sequestration (gC / m2 / year)
+cseq_low = 85.0    # g C / m2 / yr (conservative)
+cseq_typ = 110.0   # g C / m2 / yr (typical)
+cseq_high = 300.0  # g C / m2 / yr (high)
+
+# Latent heat of vaporization (J/kg)
+L_v = 2.45e6
+
+# Seconds per year for temporal scaling
+seconds_per_year = 365.25 * 24 * 3600.0
