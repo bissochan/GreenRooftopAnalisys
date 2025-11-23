@@ -53,7 +53,7 @@ def calculate_detrend(data, data_type='meteo'):
         # Mappa dei nomi dei residui coerenti con il codice originale
         residual_name_map = {
             'Temp_C': 'Temperature_Residual',
-            'Wind_ms': 'WindSpeed_Residual',
+            'Wind_ms': 'Wind_Speed_Residual',
             'Radiation_Wm2': 'Radiation_Residual'
         }
 
@@ -90,10 +90,9 @@ def calculate_detrend(data, data_type='meteo'):
     return data
 
 
-
 def calculate_tuning_params(data, data_type='meteo'):
     if data_type == 'meteo':
-        variables = ['Temperature_Residual', 'WindSpeed_Residual', 'Radiation_Residual']
+        variables = ['Temperature_Residual', 'Wind_Speed_Residual', 'Radiation_Residual']
     else:
         variables = ['CO2_Residual', 'PM10_Residual', 'PM2_5_Residual', 'CO_Residual']
 
@@ -127,7 +126,7 @@ def plot_histogram(residuals, variable_name, unit):
     plt.xlabel(f'Detrended {variable_name} ({unit})')
     plt.ylabel('Density')
     plt.title(f'Histogram of Detrended {variable_name} Data (Residuals)')
-    filename = os.path.join(PLOT_DIR, f'{variable_name.lower().replace(" ", "_")}_residuals_hist.png')
+    filename = os.path.join(PLOT_DIR, f'{variable_name.lower().replace(" ", "_").replace(".", "_")}_residuals_hist.png')
     plt.savefig(filename)
     plt.close()
     print(f"Saved {filename}")
@@ -157,7 +156,7 @@ def analyze_bic_for_gmm(residuals, max_k, variable_name, output_dir):
     plt.ylabel('BIC Score')
     plt.title(f'BIC Model Selection for {variable_name} Residuals')
     plt.grid(True)
-    bic_plot_filename = os.path.join(output_dir, f'{variable_name.lower().replace(" ", "_")}_bic.png')
+    bic_plot_filename = os.path.join(output_dir, f'{variable_name.lower().replace(" ", "_").replace(".", "_")}_bic.png')
     plt.savefig(bic_plot_filename)
     plt.close()
     print(f"Saved BIC plot: {bic_plot_filename}")
@@ -173,15 +172,12 @@ def main():
     meteo_data = load_and_clean_data('open-meteo.csv', data_type='meteo')
     meteo_detrended = calculate_detrend(meteo_data, data_type='meteo')
     calculate_tuning_params(meteo_detrended, data_type='meteo')
-# METEO
     plot_histogram(meteo_detrended['Radiation_Residual'], 'Radiation', 'W/m²')
     plot_histogram(meteo_detrended['Temperature_Residual'], 'Temperature', '°C')
-    plot_histogram(meteo_detrended['WindSpeed_Residual'], 'Wind Speed', 'm/s')
-    
+    plot_histogram(meteo_detrended['Wind_Speed_Residual'], 'Wind Speed', 'm/s')
     analyze_bic_for_gmm(meteo_detrended['Radiation_Residual'], MAX_K_COMPONENTS, 'Radiation', PLOT_DIR)
     analyze_bic_for_gmm(meteo_detrended['Temperature_Residual'], MAX_K_COMPONENTS, 'Temperature', PLOT_DIR)
-    analyze_bic_for_gmm(meteo_detrended['WindSpeed_Residual'], MAX_K_COMPONENTS, 'Wind Speed', PLOT_DIR)
-
+    analyze_bic_for_gmm(meteo_detrended['Wind_Speed_Residual'], MAX_K_COMPONENTS, 'Wind Speed', PLOT_DIR)
 
     # AIR QUALITY
     air_data = load_and_clean_data('air_quality.csv', data_type='air_quality')

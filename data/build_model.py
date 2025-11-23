@@ -8,12 +8,12 @@ import sys
 import os
 
 OPTIMAL_K = {
-    'Radiation': 6,
+    'Radiation': 5,
     'Temperature': 3,
-    'WindSpeed': 2,
+    'Wind_Speed': 2,
     'CO2': 4,
-    'PM10': 4,
-    'PM2_5': 4,
+    'PM10': 3,
+    'PM2_5': 3,
     'CO': 3
 }
 
@@ -87,7 +87,7 @@ def main():
 
     # METEO
     meteo_res = load_residuals(RESIDUALS_FILE_METEO)
-    for var, unit in zip(['Radiation_Residual', 'Temperature_Residual', 'WindSpeed_Residual'], ['W/m²', '°C', 'm/s']):
+    for var, unit in zip(['Radiation_Residual', 'Temperature_Residual', 'Wind_Speed_Residual'], ['W/m²', '°C', 'm/s']):
         gmm, res = fit_and_save_gmm(meteo_res[var], var.replace('_Residual', ''))
         plot_final_gmm_fit(res, gmm, var.replace('_Residual', ''), unit)
 
