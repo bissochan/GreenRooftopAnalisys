@@ -13,7 +13,7 @@ WEATHER_SAMPLES_FILE = os.path.join(SIM_DIR, "csv_results", "weather_samples.csv
 TREND_FILE = os.path.join(CSV_DIR, "meteo_hourly_trend.csv")
 REAL_DATA_FILE = os.path.join(DATA_DIR, "open-meteo.csv")
 
-OUTPUT_DIR = "results"
+OUTPUT_DIR = "results\\weather"
 OUTPUT_REPORT = os.path.join(OUTPUT_DIR, "weather_evaluation_report.txt")
 N_SIMULATIONS = 100
 
