@@ -192,7 +192,7 @@ def simulate_physics(weather):
 # ===========================
 
 
-def run_monte_carlo(n_sims=100):
+def run_monte_carlo(n_sims=1000):
     """Run Monte Carlo simulations and save all outputs."""
     mc_results = []
     weather_samples = []
