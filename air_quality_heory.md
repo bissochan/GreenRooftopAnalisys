@@ -69,10 +69,6 @@ $$
 r_t = \phi \, r_{t-1} + \sigma \, \varepsilon_t
 $$
 
-Using Yule-Walker or MLE to estimate:
-- **φ (phi)**: autocorrelation lag-1 coefficient (persistence)
-- **σ (sigma)**: noise scale
-- **bias**: daily scenario-level bias standard deviation
 
 **Saved as**: air_quality_tuning_params.csv
 
@@ -342,33 +338,6 @@ Loads and aligns:
 - **Lines**: 30 sample runs (faint gray) + mean (red bold)
 - **Use**: Show accumulation pattern; e.g., CO₂ removal rises during daylight, plateaus at night
 
-### 7.3 Numerical Metrics (in report)
-
-| Metric | Formula | Interpretation |
-|--------|---------|-----------------|
-| Mean Bias | $\frac{1}{24} \sum_h (\text{sim}_h - \text{trend}_h)$ | Signed systematic offset |
-| RMSE | $\sqrt{\frac{1}{24} \sum_h (\text{sim}_h - \text{real}_h)^2}$ | Overall fit error |
-| CV (Real vs Sim) | $\frac{\sigma}{\mu}$ for each | Coefficient of variation (relative spread) |
-| KS statistic | Kolmogorov–Smirnov test | Distance between empirical CDFs; p-value < 0.05 → significant difference |
-| Percentiles (P05, P50, P95, P99) | Quantile comparison | Distribution shape; mismatches in tails flag poor extreme modeling |
-
-### 7.4 Common Issues & Fixes
-
-**Issue**: Simulated mean is consistently higher/lower than real by a fixed amount
-- **Cause**: Bias term in AR(1) tuning or trend offset
-- **Fix**: Inspect `air_quality_tuning_params.csv` bias column; recalibrate or apply post-hoc correction
-
-**Issue**: Simulated std much smaller than real
-- **Cause**: σ parameter too small, or GMM not capturing multi-modal behavior
-- **Fix**: Refit GMM with more components; increase σ
-
-**Issue**: ECDF diverges in tails (P99 too high/low)
-- **Cause**: AR(1) max_err cap too aggressive, or GMM doesn't sample extremes
-- **Fix**: Relax max_err; refit GMM allowing heavier tails
-
-**Issue**: Removal rates constant (no variability)
-- **Cause**: compute_ecology using fixed coefficients instead of concentration-dependent terms
-- **Fix**: Verify that Vd and LAI scaling are active; check that conc is passed to function
 
 ---
 
