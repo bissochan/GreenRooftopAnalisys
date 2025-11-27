@@ -24,7 +24,7 @@ FILES = {
 }
 
 # OUTPUT_DIR = "results_weather"
-OUTPUT_DIR = os.path.join("results", "results_weather")
+OUTPUT_DIR = os.path.join("results", "weather")
 
 OUTPUT_REPORT = os.path.join(OUTPUT_DIR, "weather_evaluation_report.txt")
 N_SIMULATIONS = 100

@@ -1,329 +1,312 @@
-import os
-import json
-import numpy as np
 import pandas as pd
+import numpy as np
+import os
 import matplotlib.pyplot as plt
 from scipy import stats
+import seaborn as sns
+
+# Basic styling
+sns.set_theme(style="whitegrid")
+plt.rcParams.update({'figure.figsize': (8, 6), 'figure.dpi': 100})
+
+COLOR_REAL = 'seagreen'
+COLOR_SIM = 'crimson'
+COLOR_TREND = 'black'
 
 DATA_DIR = os.path.join("..", "data")
 CSV_DIR = os.path.join(DATA_DIR, "csv")
 SIM_DIR = os.path.join("..", "simulation")
 
-WEATHER_SAMPLES_FILE = os.path.join(SIM_DIR, "eco_results", "weather_samples_eco.csv")
-SIM_RESULTS_FILE = os.path.join(SIM_DIR, "eco_results", "simulation_results_eco.csv")
-TREND_FILE = os.path.join(CSV_DIR, "air_quality_hourly_trend.csv")
-REAL_DATA_FILE = os.path.join(DATA_DIR, "air_quality.csv")
+FILES = {
+    "sim": os.path.join(SIM_DIR, "csv_results", "air_quality_samples.csv"),
+    "trend": os.path.join(CSV_DIR, "air_quality_hourly_trend.csv"),
+    "real": os.path.join(DATA_DIR, "air_quality.csv")
+}
 
-OUTPUT_DIR = "results/air_quality"
+OUTPUT_DIR = os.path.join("results", "air_quality_test")
 OUTPUT_REPORT = os.path.join(OUTPUT_DIR, "air_quality_evaluation_report.txt")
 N_SIMULATIONS = 100
 
-
-def _read_real_airfile(path):
-    # file contains two initial metadata lines before the real header that starts with "time,"
-    with open(path, "r", encoding="utf-8") as f:
-        lines = f.readlines()
-    header_idx = None
-    for i, L in enumerate(lines[:20]):
-        if L.strip().lower().startswith("time,"):
-            header_idx = i
-            break
-    if header_idx is None:
-        raise ValueError("Could not locate header line starting with 'time,' in air_quality.csv")
-    df = pd.read_csv(path, skiprows=header_idx)
-    return df
+# ----------------
+# DATA LOADING
+# ----------------
 
 
 def load_data():
+    print("Loading datasets...")
+
+    # Load simulated MC data
     try:
-        if not os.path.exists(WEATHER_SAMPLES_FILE) or not os.path.exists(SIM_RESULTS_FILE) or not os.path.exists(TREND_FILE):
-            raise FileNotFoundError("One or more required simulation/trend files are missing.")
+        df_sim = pd.read_csv(FILES["sim"])
+        if 'hour' not in df_sim.columns:
+            df_sim['hour'] = df_sim.index % 24
+    except FileNotFoundError:
+        return None, None, None, None
 
-        df_weather = pd.read_csv(WEATHER_SAMPLES_FILE)
-        if "hour" not in df_weather.columns:
-            df_weather["hour"] = df_weather.index % 24
+    # Load historical trends
+    try:
+        df_trend = pd.read_csv(FILES["trend"])
+        df_trend = df_trend.rename(columns={
+            'CO2_ppm_Trend': 'co2_Trend',
+            'CO_ugm3_Trend': 'co_Trend',
+            'PM10_ugm3_Trend': 'pm10_Trend',
+            'PM2_5_ugm3_Trend': 'pm25_Trend'
+        })
+        if 'hour' not in df_trend.columns:
+            df_trend['hour'] = df_trend.index
+    except FileNotFoundError:
+        return None, None, None, None
 
-        df_sim = pd.read_csv(SIM_RESULTS_FILE)
-        if "hour" not in df_sim.columns:
-            df_sim["hour"] = df_sim.index % 24
+    # Load real hourly data
+    try:
+        # skip first 2 metadata lines
+        df_real = pd.read_csv(FILES["real"], skiprows=2)
 
-        df_trend = pd.read_csv(TREND_FILE)
-        # ensure hour column exists in trend
-        if "hour" not in df_trend.columns:
-            df_trend["hour"] = df_trend.index
-        # no rename necessary if columns are already CO2_Trend, PM10_Trend, PM2_5_Trend, CO_Trend
+        # rename columns in a clean way
+        df_real = df_real.rename(columns={
+            'time': 'timestamp',
+            'carbon_dioxide (ppm)': 'co2',
+            'pm10 (μg/m³)': 'pm10',
+            'pm2_5 (μg/m³)': 'pm25',
+            'carbon_monoxide (μg/m³)': 'co'
+        })
 
-        # read real air file (robust to initial metadata lines)
-        df_real = _read_real_airfile(REAL_DATA_FILE)
+        # convert timestamp and extract hour
+        df_real['timestamp'] = pd.to_datetime(df_real['timestamp'], errors='coerce')
+        df_real['hour'] = df_real['timestamp'].dt.hour
 
-        # rename columns present in the provided sample
-        rename_map = {}
-        if "time" in df_real.columns:
-            rename_map["time"] = "timestamp"
-        # possible column names from file sample
-        if "carbon_dioxide (ppm)" in df_real.columns:
-            rename_map["carbon_dioxide (ppm)"] = "co2_real"
-        if "pm10 (μg/m³)" in df_real.columns:
-            rename_map["pm10 (μg/m³)"] = "pm10_real"
-        if "pm2_5 (μg/m³)" in df_real.columns:
-            rename_map["pm2_5 (μg/m³)"] = "pm25_real"
-        if "carbon_monoxide (μg/m³)" in df_real.columns:
-            rename_map["carbon_monoxide (μg/m³)"] = "co_real"
+        # aggregate hourly stats
+        df_real_hourly = df_real.groupby('hour').agg(
+            co2_std=('co2', 'std'),
+            co_std=('co', 'std'),
+            pm10_std=('pm10', 'std'),
+            pm25_std=('pm25', 'std')
+        ).reset_index()
+    except FileNotFoundError:
+        return None, None, None, None
 
-        df_real = df_real.rename(columns=rename_map)
+    print("Data loaded")
+    return df_sim, df_trend, df_real, df_real_hourly
 
-        # parse timestamp and compute hour
-        if "timestamp" in df_real.columns:
-            df_real["timestamp"] = pd.to_datetime(df_real["timestamp"], errors="coerce")
-            df_real["hour"] = df_real["timestamp"].dt.hour
-        else:
-            # fallback: create hour from order
-            df_real["hour"] = np.arange(len(df_real)) % 24
-
-        # aggregate hourly stats from real data (may contain NaNs)
-        agg_map = {}
-        if "co2_real" in df_real.columns:
-            agg_map["real_co2_mean"] = ("co2_real", "mean")
-            agg_map["real_co2_std"] = ("co2_real", "std")
-        if "co_real" in df_real.columns:
-            agg_map["real_co_mean"] = ("co_real", "mean")
-            agg_map["real_co_std"] = ("co_real", "std")
-        if "pm10_real" in df_real.columns:
-            agg_map["real_pm10_mean"] = ("pm10_real", "mean")
-            agg_map["real_pm10_std"] = ("pm10_real", "std")
-        if "pm25_real" in df_real.columns:
-            agg_map["real_pm25_mean"] = ("pm25_real", "mean")
-            agg_map["real_pm25_std"] = ("pm25_real", "std")
-
-        if agg_map:
-            df_real_hourly = df_real.groupby("hour").agg(**agg_map).reset_index()
-        else:
-            df_real_hourly = pd.DataFrame({"hour": list(range(24))})
-
-        return df_weather, df_sim, df_trend, df_real, df_real_hourly
-
-    except Exception as e:
-        print(f"ERROR loading data: {e}")
-        return None, None, None, None, None
-
-
-def _ensure_outdir():
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
+# ----------------
+# PLOTTING
+# ----------------
 
 
 def save_plot_mean(df_comp, var, title, unit, ci_error):
-    plt.figure(figsize=(10, 5))
-    trend_col = f"{var.upper()}_Trend"
-    gen_mean_col = f"gen_{var}_mean"
-    real_mean_col = f"real_{var}_mean"
+    plt.figure()
+    trend_col = f'{var}_Trend'
+    mean_col = f'gen_{var}_mean'
 
     if trend_col in df_comp.columns:
-        plt.plot(df_comp["hour"], df_comp[trend_col], label="Trend", color="k", linestyle="--")
-    if real_mean_col in df_comp.columns:
-        plt.plot(df_comp["hour"], df_comp[real_mean_col], label="Real mean", color="g")
-    plt.plot(df_comp["hour"], df_comp[gen_mean_col], label="Simulated mean", color="r")
-    plt.fill_between(df_comp["hour"],
-                     df_comp[gen_mean_col] - ci_error,
-                     df_comp[gen_mean_col] + ci_error,
-                     color="r", alpha=0.2, label="95% CI")
-    plt.title(f"{title} mean (hourly)")
+        plt.plot(df_comp['hour'], df_comp[trend_col], color=COLOR_TREND, ls='--', label='Historical Trend')
+
+    plt.plot(df_comp['hour'], df_comp[mean_col], color=COLOR_SIM, label='Simulated Mean')
+
+    plt.fill_between(
+        df_comp['hour'],
+        df_comp[mean_col] - ci_error,
+        df_comp[mean_col] + ci_error,
+        alpha=0.2,
+        color=COLOR_SIM
+    )
+
+    plt.title(f"{title}: Mean Hourly Profile")
     plt.xlabel("Hour")
-    plt.ylabel(unit)
+    plt.ylabel(f"{title} {unit}")
     plt.legend()
-    plt.grid(alpha=0.3)
     plt.tight_layout()
-    plt.savefig(os.path.join(OUTPUT_DIR, f"{var}_mean.png"), dpi=150)
+    plt.savefig(os.path.join(OUTPUT_DIR, f"{var}_mean.png"))
     plt.close()
 
 
 def save_plot_std(df_comp, var, title, unit):
-    plt.figure(figsize=(10, 5))
-    real_std_col = f"real_{var}_std"
-    gen_std_col = f"gen_{var}_std"
-    if real_std_col in df_comp.columns:
-        plt.plot(df_comp["hour"], df_comp[real_std_col], label="Real std", color="g")
-    if gen_std_col in df_comp.columns:
-        plt.plot(df_comp["hour"], df_comp[gen_std_col], label="Sim std", color="purple", linestyle="--")
-    plt.title(f"{title} std dev (hourly)")
+    plt.figure()
+    real_std = f'{var}_std'
+    sim_std = f'gen_{var}_std'
+
+    plt.plot(df_comp['hour'], df_comp[real_std], color=COLOR_REAL, label="Real Std")
+    plt.plot(df_comp['hour'], df_comp[sim_std], color=COLOR_SIM, ls="--", label="Sim Std")
+
+    plt.title(f"{title}: Hourly Std Dev")
     plt.xlabel("Hour")
-    plt.ylabel(unit)
+    plt.ylabel(f"Std {unit}")
     plt.legend()
-    plt.grid(alpha=0.3)
     plt.tight_layout()
-    plt.savefig(os.path.join(OUTPUT_DIR, f"{var}_std.png"), dpi=150)
+    plt.savefig(os.path.join(OUTPUT_DIR, f"{var}_std.png"))
     plt.close()
 
 
-def save_plot_ecdf(real_series, gen_series, var):
-    if real_series is None or len(real_series) == 0:
-        return
-    plt.figure(figsize=(8, 5))
-    xr = np.sort(real_series)
-    yr = np.arange(1, len(xr) + 1) / len(xr)
-    xg = np.sort(gen_series)
-    yg = np.arange(1, len(xg) + 1) / len(xg)
-    plt.plot(xr, yr, label="Real", color="g")
-    plt.plot(xg, yg, label="Sim", color="purple", linestyle="--")
-    plt.title(f"{var} ECDF")
-    plt.xlabel(var)
-    plt.ylabel("CDF")
-    plt.legend()
-    plt.grid(alpha=0.3)
+def save_plot_kde(real_data, gen_data, var, title, unit):
+    plt.figure()
+    sns.kdeplot(real_data, fill=True, color=COLOR_REAL, alpha=0.3, label="Real")
+    sns.kdeplot(gen_data, fill=True, color=COLOR_SIM, alpha=0.3, label="Sim")
+
+    plt.title(f"{title}: Distribution")
+    plt.xlabel(f"{title} {unit}")
     plt.tight_layout()
-    plt.savefig(os.path.join(OUTPUT_DIR, f"{var}_ecdf.png"), dpi=150)
+    plt.savefig(os.path.join(OUTPUT_DIR, f"{var}_kde.png"))
     plt.close()
 
 
-def save_plot_qq(gen_series, var):
-    if gen_series is None or len(gen_series) == 0:
-        return
-    plt.figure(figsize=(6, 6))
-    stats.probplot(gen_series, dist="norm", plot=plt)
-    plt.title(f"{var} Q-Q")
+def save_plot_ecdf(real_data, gen_data, var, title, unit):
+    plt.figure()
+
+    x_r = np.sort(real_data)
+    y_r = np.arange(1, len(x_r) + 1) / len(x_r)
+
+    x_g = np.sort(gen_data)
+    y_g = np.arange(1, len(x_g) + 1) / len(x_g)
+
+    plt.plot(x_r, y_r, color=COLOR_REAL, label="Real")
+    plt.plot(x_g, y_g, color=COLOR_SIM, ls="--", label="Sim")
+
+    plt.title(f"{title}: ECDF")
+    plt.xlabel(f"{title} {unit}")
     plt.tight_layout()
-    plt.savefig(os.path.join(OUTPUT_DIR, f"{var}_qq.png"), dpi=150)
+    plt.savefig(os.path.join(OUTPUT_DIR, f"{var}_ecdf.png"))
     plt.close()
 
 
-def save_removal_plots(df_sim, var, is_co2=False):
-    removal_col = f"{var.upper()}_Removed_{'g' if is_co2 else 'ug'}"
-    if removal_col not in df_sim.columns:
-        return
-    # hourly mean ± std
-    hourly = df_sim.groupby("hour")[removal_col].agg(["mean", "std"]).reset_index()
-    plt.figure(figsize=(10, 5))
-    plt.plot(hourly["hour"], hourly["mean"], label="mean", color="b")
-    plt.fill_between(hourly["hour"], hourly["mean"] - hourly["std"], hourly["mean"] + hourly["std"], alpha=0.2)
-    plt.title(f"{var} removal hourly")
-    plt.xlabel("Hour")
-    plt.ylabel(removal_col)
-    plt.grid(alpha=0.3)
+def save_plot_qq(gen_data, var, title):
+    plt.figure()
+    stats.probplot(gen_data, dist="norm", plot=plt)
+    plt.title(f"{title}: QQ Plot")
     plt.tight_layout()
-    plt.savefig(os.path.join(OUTPUT_DIR, f"{var}_removal_hourly.png"), dpi=150)
+    plt.savefig(os.path.join(OUTPUT_DIR, f"{var}_qq.png"))
     plt.close()
 
-    # daily totals distribution
-    daily = df_sim.groupby("run_id")[removal_col].sum()
-    plt.figure(figsize=(8, 5))
-    plt.hist(daily.dropna(), bins=20, color="steelblue", edgecolor="k")
-    plt.axvline(daily.mean(), color="r", linestyle="--", label=f"mean {daily.mean():.2f}")
-    plt.legend()
-    plt.title(f"{var} daily totals distribution")
+
+def save_correlation_heatmap(df, name):
+    plt.figure(figsize=(6, 5))
+    cols = ['co2', 'co', 'pm10', 'pm25']
+    corr = df[cols].dropna(subset=cols).corr()
+    sns.heatmap(corr, annot=True, cmap='coolwarm', vmin=-1, vmax=1, fmt=".2f")
+    plt.title(f"Correlation Matrix: {name}")
     plt.tight_layout()
-    plt.savefig(os.path.join(OUTPUT_DIR, f"{var}_daily_totals.png"), dpi=150)
+    plt.savefig(os.path.join(OUTPUT_DIR, f"CorrMatrix_{name}.png"))
     plt.close()
 
-    # cumulative mean
-    mean_cumsum = df_sim.groupby("hour")[removal_col].sum().cumsum()
-    plt.figure(figsize=(10, 5))
-    plt.plot(mean_cumsum.index, mean_cumsum.values, "r-", linewidth=2)
-    plt.title(f"{var} cumulative mean (24h)")
-    plt.xlabel("Hour")
-    plt.ylabel("Cumulative")
-    plt.grid(alpha=0.3)
+
+def save_plot_hourly_boxplot(df_sim, df_real, var, title, unit):
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+
+    sns.boxplot(x="hour", y=var, data=df_real, ax=ax1, color=COLOR_REAL, showfliers=False)
+    ax1.set_title("Real Data")
+
+    sns.boxplot(x="hour", y=var, data=df_sim, ax=ax2, color=COLOR_SIM, showfliers=False)
+    ax2.set_title("Simulated Data")
+    ax2.set_xlabel("Hour")
+
     plt.tight_layout()
-    plt.savefig(os.path.join(OUTPUT_DIR, f"{var}_cumulative.png"), dpi=150)
+    plt.savefig(os.path.join(OUTPUT_DIR, f"{var}_hourly_box.png"))
     plt.close()
 
-    return daily
+
+# ----------------
+# METRICS
+# ----------------
+
+def calculate_metrics(df_comp, real_series, gen_series, var, trend_col):
+    metrics = {}
+
+    mean_col = f'gen_{var}_mean'
+    if trend_col in df_comp.columns:
+        metrics['bias'] = (df_comp[mean_col] - df_comp[trend_col]).abs().mean()
+    else:
+        metrics['bias'] = np.nan
+
+    metrics['std_error'] = (
+        df_comp[f'gen_{var}_std'] - df_comp[f'{var}_std']
+    ).abs().mean()
+
+    ks_stat, _ = stats.ks_2samp(real_series, gen_series)
+    metrics['ks_stat'] = ks_stat
+
+    cov_real = np.std(real_series) / np.mean(real_series)
+    cov_sim = np.std(gen_series) / np.mean(gen_series)
+    metrics['cov_real'] = cov_real
+    metrics['cov_gen'] = cov_sim
+
+    metrics['p_real'] = np.percentile(real_series, [5, 50, 95, 99])
+    metrics['p_gen'] = np.percentile(gen_series, [5, 50, 95, 99])
+
+    return metrics
+
+# ----------------
+# MAIN
+# ----------------
 
 
-def run_evaluation():
-    _ensure_outdir()
-    df_weather, df_sim, df_trend, df_real, df_real_hourly = load_data()
+def main():
+    if not os.path.exists(OUTPUT_DIR):
+        os.makedirs(OUTPUT_DIR)
+
+    df_sim, df_trend, df_real, df_real_hourly = load_data()
     if df_sim is None:
-        print("ERROR: Could not load simulation data")
+        print("Missing input files.")
         return
 
-    # hourly stats for simulated concentrations
-    df_sim_hourly = df_sim.groupby("hour").agg(
-        gen_co2_mean=("CO2", "mean"),
-        gen_co2_std=("CO2", "std"),
-        gen_co_mean=("CO", "mean"),
-        gen_co_std=("CO", "std"),
-        gen_pm10_mean=("PM10", "mean"),
-        gen_pm10_std=("PM10", "std"),
-        gen_pm25_mean=("PM25", "mean"),
-        gen_pm25_std=("PM25", "std"),
+    save_correlation_heatmap(df_real, "RealData")
+    save_correlation_heatmap(df_sim, "SimulatedData")
+
+    vars_config = [
+        ('co2', 'CO2 Concentration', '(ppm)'),
+        ('co', 'CO Concentration', '(µg/m³)'),
+        ('pm10', 'PM10 Level', '(µg/m³)'),
+        ('pm25', 'PM2.5 Level', '(µg/m³)')
+    ]
+
+    df_sim_hourly = df_sim.groupby('hour').agg(
+        gen_co2_mean=('co2', 'mean'), gen_co2_std=('co2', 'std'),
+        gen_co_mean=('co', 'mean'), gen_co_std=('co', 'std'),
+        gen_pm10_mean=('pm10', 'mean'), gen_pm10_std=('pm10', 'std'),
+        gen_pm25_mean=('pm25', 'mean'), gen_pm25_std=('pm25', 'std'),
     ).reset_index()
 
     df_comp = pd.merge(df_sim_hourly, df_trend, on="hour", how="left")
     df_comp = pd.merge(df_comp, df_real_hourly, on="hour", how="left")
 
-    report_lines = []
-    report_lines.append("AIR QUALITY EVALUATION")
-    report_lines.append(f"Sim file: {SIM_RESULTS_FILE}")
-    report_lines.append(f"Real data file: {REAL_DATA_FILE}")
-    report_lines.append("")
+    t_val = stats.t.ppf(0.975, N_SIMULATIONS - 1)
 
-    t_val = stats.t.ppf(0.975, max(2, N_SIMULATIONS - 1))
+    report = []
+    report.append("AIR QUALITY EVALUATION REPORT\n")
 
-    variables = [
-        ("co2", "CO2", "ppm", True),
-        ("co", "CO", "µg/m³", False),
-        ("pm10", "PM10", "µg/m³", False),
-        ("pm25", "PM2.5", "µg/m³", False),
-    ]
+    for var, title, unit in vars_config:
 
-    for var, title, unit, is_co2 in variables:
-        gen_mean_col = f"gen_{var}_mean"
-        gen_std_col = f"gen_{var}_std"
-        if gen_mean_col in df_comp.columns:
-            ci_err = t_val * (df_comp[gen_std_col] / np.sqrt(N_SIMULATIONS)).fillna(0) if gen_std_col in df_comp.columns else np.zeros(len(df_comp))
-            save_plot_mean(df_comp, var, title, unit, ci_err)
-        if gen_std_col in df_comp.columns:
-            save_plot_std(df_comp, var, title, unit)
+        real_series = df_real[var].dropna().values
+        gen_series = df_sim[var].dropna().values
 
-        # ECDF and QQ using weather samples (generated concentrations)
-        if var in df_weather.columns:
-            gen_series = df_weather[var].dropna().values
-            real_series = None
-            col_real = f"{var}_real"
-            if col_real in df_real.columns:
-                real_series = df_real[col_real].dropna().values
-            save_plot_ecdf(real_series if real_series is not None else np.array([]), gen_series, title)
-            save_plot_qq(gen_series, title)
+        ci_error = t_val * (df_comp[f'gen_{var}_std'] / np.sqrt(N_SIMULATIONS))
 
-        # removal plots and daily totals
-        daily_totals = save_removal_plots(df_sim, var, is_co2=is_co2)
+        save_plot_mean(df_comp, var, title, unit, ci_error)
+        save_plot_std(df_comp, var, title, unit)
+        save_plot_kde(real_series, gen_series, var, title, unit)
+        save_plot_ecdf(real_series, gen_series, var, title, unit)
 
-        # report stats
-        report_lines.append(f"\n[{title}]")
-        # bias vs trend
-        trend_col = f"{title.upper()}_Trend"
-        bias = np.nan
-        if trend_col in df_comp.columns and gen_mean_col in df_comp.columns:
-            bias = np.nanmean(np.abs(df_comp[gen_mean_col] - df_comp[trend_col]))
-        report_lines.append(f"Mean bias vs trend: {bias:.3f} {unit}")
+        gen_sample = np.random.choice(gen_series, size=min(len(gen_series), 2000), replace=False)
+        save_plot_qq(gen_sample, var, title)
+        save_plot_hourly_boxplot(df_sim, df_real, var, title, unit)
 
-        # compare percentiles
-        if var in df_weather.columns:
-            gen_ser = df_weather[var].dropna().values
-            pgen = np.percentile(gen_ser, [5, 50, 95, 99]) if len(gen_ser) else [np.nan]*4
-        else:
-            pgen = [np.nan]*4
-        if f"{var}_real" in df_real.columns:
-            real_ser = df_real[f"{var}_real"].dropna().values
-            preal = np.percentile(real_ser, [5, 50, 95, 99]) if len(real_ser) else [np.nan]*4
-        else:
-            preal = [np.nan]*4
-        report_lines.append(f"Percentiles Real vs Sim (P5,P50,P95,P99): {preal} | {pgen}")
+        metrics = calculate_metrics(df_comp, real_series, gen_series, var, f'{var}_Trend')
 
-        # daily removal summary
-        if daily_totals is not None:
-            report_lines.append(f"Daily removal mean: {daily_totals.mean():.2f}, std: {daily_totals.std():.2f}")
+        report.append(f"[{title.upper()}]")
+        report.append(f"MEAN BIAS: {metrics['bias']:.4f} {unit}")
+        report.append(f"STD ERROR: {metrics['std_error']:.4f} {unit}")
+        report.append(f"COV (Real / Sim): {metrics['cov_real']:.3f} / {metrics['cov_gen']:.3f}")
+        report.append(f"KS STAT: {metrics['ks_stat']:.4f}")
+        report.append("PERCENTILES (R | S):")
+        report.append(f"  P05: {metrics['p_real'][0]:.2f} | {metrics['p_gen'][0]:.2f}")
+        report.append(f"  P50: {metrics['p_real'][1]:.2f} | {metrics['p_gen'][1]:.2f}")
+        report.append(f"  P95: {metrics['p_real'][2]:.2f} | {metrics['p_gen'][2]:.2f}")
+        report.append(f"  P99: {metrics['p_real'][3]:.2f} | {metrics['p_gen'][3]:.2f}")
+        report.append("")
 
-    # save report and a small json summary
     with open(OUTPUT_REPORT, "w", encoding="utf-8") as f:
-        f.write("\n".join(report_lines))
+        f.write("\n".join(report))
 
-    summary = {"note": "evaluation complete"}
-    with open(os.path.join(OUTPUT_DIR, "summary.json"), "w", encoding="utf-8") as f:
-        json.dump(summary, f, indent=2)
-
-    print("Evaluation complete. Outputs in:", OUTPUT_DIR)
+    print(f"Air quality evaluation completed. Results in: {OUTPUT_DIR}/")
 
 
 if __name__ == "__main__":
-    run_evaluation()
+    main()
