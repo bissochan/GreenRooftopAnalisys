@@ -8,5 +8,6 @@ data/pkl_models/
 data/plots/
 
 simulation/csv_results/
+simulation/eco_results/
 
 evaluation/results/
