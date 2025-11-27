@@ -9,6 +9,7 @@ from model import parameters as p
 from model import roof as roof_model
 from model import aerodynamics as aero_model
 from model import facade as facade_model
+from model.ecology import compute_ecology
 from blocks.roof_block import RoofBlock
 from blocks.aerodynamics_block import AerodynamicsBlock
 from blocks.facade_block import FacadeBlock
@@ -26,78 +27,96 @@ DATA_DIR = os.path.join("..", "data")
 CSV_DIR = os.path.join(DATA_DIR, "csv")
 PKL_DIR = os.path.join(DATA_DIR, "pkl_models")
 
-TREND_FILE = os.path.join(CSV_DIR, "meteo_hourly_trend.csv")
-TUNING_FILE = os.path.join(CSV_DIR, "meteo_tuning_params.csv")
+METEO_TREND_FILE = os.path.join(CSV_DIR, "meteo_hourly_trend.csv")
+METEO_TUNING_FILE = os.path.join(CSV_DIR, "meteo_tuning_params.csv")
+AIR_TREND_FILE = os.path.join(CSV_DIR, "air_quality_hourly_trend.csv")
+AIR_TUNING_FILE = os.path.join(CSV_DIR, "air_quality_tuning_params.csv")
 
-try:
-    df_trend = pd.read_csv(TREND_FILE)
-    N_TRENDS = len(df_trend)
-    trends = {
-        "temp": df_trend["Temp_C_Trend"].values,
-        "wind": df_trend["Wind_ms_Trend"].values,
-        "rad": df_trend["Radiation_Wm2_Trend"].values,
-    }
-except FileNotFoundError:
-    sys.exit(f"Error: Trend file not found at {TREND_FILE}")
 
-try:
-    tuning_df = pd.read_csv(TUNING_FILE, index_col=0)
-except FileNotFoundError:
-    sys.exit(f"Error: Tuning file not found at {TUNING_FILE}")
+def load_resource_file():
+    print("Loading datasets...")
+    try:
+        df_trend_meteo = pd.read_csv(METEO_TREND_FILE)
+        df_trend_air = pd.read_csv(AIR_TREND_FILE)
 
-PARAMS = {
-    "temp": {
-        "phi": tuning_df.loc["Temperature_Residual", "phi"],
-        "sigma": tuning_df.loc["Temperature_Residual", "sigma"],
-        "bias_std": tuning_df.loc["Temperature_Residual", "bias"],
-        "max_err": 3.0,
-        "file": "temperature_gmm.pkl",
-    },
-    "wind": {
-        "phi": tuning_df.loc["Wind_Speed_Residual", "phi"],
-        "sigma": tuning_df.loc["Wind_Speed_Residual", "sigma"],
-        "bias_std": tuning_df.loc["Wind_Speed_Residual", "bias"],
-        "max_err": 4.0,
-        "file": "wind_speed_gmm.pkl",
-    },
-    "rad": {
-        "phi": tuning_df.loc["Radiation_Residual", "phi"],
-        "sigma": tuning_df.loc["Radiation_Residual", "sigma"],
-        "bias_std": tuning_df.loc["Radiation_Residual", "bias"],
-        "max_err": None,
-        "file": "radiation_gmm.pkl",
-    },
-}
+        if len(df_trend_meteo) != len(df_trend_air):
+            raise ValueError("Meteo and Air trend files must have the same number of entries.")
+        n = len(df_trend_meteo)
 
-models = {}
-for key, config in PARAMS.items():
-    path = os.path.join(PKL_DIR, config["file"])
-    with open(path, "rb") as f:
-        models[key] = pickle.load(f)
-        models[key].random_state = None
+        trends = {
+            "temp": df_trend_meteo["Temp_C_Trend"].values,
+            "wind": df_trend_meteo["Wind_ms_Trend"].values,
+            "rad": df_trend_meteo["Radiation_Wm2_Trend"].values,
+            "co2": df_trend_air["CO2_ppm_Trend"].values,
+            "co": df_trend_air["CO_ugm3_Trend"].values,
+            "pm10": df_trend_air["PM10_ugm3_Trend"].values,
+            "pm25": df_trend_air["PM2_5_ugm3_Trend"].values,
+        }
+
+        tuning_meteo = pd.read_csv(METEO_TUNING_FILE, index_col=0)
+        tuning_air = pd.read_csv(AIR_TUNING_FILE, index_col=0)
+
+        params_config = {
+            "temp": ("Temperature_Residual", "temperature_gmm.pkl"),
+            "wind": ("Wind_Speed_Residual", "wind_speed_gmm.pkl"),
+            "rad": ("Radiation_Residual", "radiation_gmm.pkl"),
+            "co2": ("CO2_Residual", "co2_gmm.pkl"),
+            "co": ("CO_Residual", "co_gmm.pkl"),
+            "pm10": ("PM10_Residual", "pm10_gmm.pkl"),
+            "pm25": ("PM2_5_Residual", "pm2_5_gmm.pkl"),
+        }
+
+        params = {}
+        models = {}
+
+        for key, (residual_name, model_file) in params_config.items():
+            if key in {"temp", "wind", "rad"}:
+                tuning_df = tuning_meteo
+            else:
+                tuning_df = tuning_air
+
+            params[key] = {
+                "phi": tuning_df.loc[residual_name, "phi"],
+                "sigma": tuning_df.loc[residual_name, "sigma"],
+                "bias_std": tuning_df.loc[residual_name, "bias"],
+                "max_err": 3.0 if key == "temp" else 4.0 if key == "wind" else 50.0 if key == "co2" else 2.0 if key == "co" else 30.0 if key == "pm10" else 20.0 if key == "pm25" else None,
+                "file": model_file,
+            }
+
+            with open(os.path.join(PKL_DIR, model_file), "rb") as f:
+                models[key] = pickle.load(f)
+                models[key].random_state = None
+
+        print("Datasets loaded successfully.")
+        return trends, params, models, n
+    except FileNotFoundError as e:
+        sys.exit(f"Error: Trend or tuning file not found: {e}")
 
 # ===========================
 # Weather generator
 # ===========================
 
 
-def generate_stochastic_day():
+def generate_stochastic_day(n_steps, trends, params, models):
     """Generate one full weather day based on stochastic AR(1) models."""
-    n_samples = N_TRENDS
 
     bias = {
-        "temp": np.clip(np.random.normal(0, PARAMS["temp"]["bias_std"]), -15, 15),
-        "wind": np.random.normal(0, PARAMS["wind"]["bias_std"]),
-        "rad": np.random.normal(0, PARAMS["rad"]["bias_std"]),
+        "temp": np.clip(np.random.normal(0, params["temp"]["bias_std"]), -15, 15),
+        "wind": np.random.normal(0, params["wind"]["bias_std"]),
+        "rad": np.random.normal(0, params["rad"]["bias_std"]),
+        "co2": np.clip(np.random.normal(0, params["co2"]["bias_std"]), -50, 50),
+        "co": np.random.normal(0, params["co"]["bias_std"]),
+        "pm10": np.random.normal(0, params["pm10"]["bias_std"]),
+        "pm25": np.random.normal(0, params["pm25"]["bias_std"]),
     }
 
-    output = {"temp": [], "wind": [], "rad": []}
-    residuals = {"temp": 0.0, "wind": 0.0, "rad": 0.0}
+    output = {k: [] for k in trends.keys()}
+    residuals = {k: 0.0 for k in trends.keys()}
 
-    for i in range(n_samples):
-        for key in PARAMS:
+    for i in range(n_steps):
+        for key in params:
             innovation = models[key].sample(1)[0][0][0]
-            cfg = PARAMS[key]
+            cfg = params[key]
             residuals[key] = cfg["phi"] * residuals[key] + cfg["sigma"] * innovation
             if cfg["max_err"]:
                 residuals[key] = np.clip(residuals[key], -cfg["max_err"], cfg["max_err"])
@@ -118,6 +137,22 @@ def generate_stochastic_day():
             rad_val = np.clip(raw_rad, 0, 1400)
         output["rad"].append(rad_val)
 
+        # CO2
+        co2_val = trends["co2"][i] + bias["co2"] + residuals["co2"]
+        output["co2"].append(np.clip(co2_val, 300, 800))
+
+        # CO
+        co_val = trends["co"][i] + bias["co"] + residuals["co"]
+        output["co"].append(max(0.1, co_val))
+
+        # PM10
+        pm10_val = trends["pm10"][i] + bias["pm10"] + residuals["pm10"]
+        output["pm10"].append(max(0.1, pm10_val))
+
+        # PM2.5
+        pm25_val = trends["pm25"][i] + bias["pm25"] + residuals["pm25"]
+        output["pm25"].append(max(0.1, pm25_val))
+
     return output
 
 # ===========================
@@ -125,13 +160,11 @@ def generate_stochastic_day():
 # ===========================
 
 
-def simulate_physics(weather):
+def run_physics_simulation(daily_data, n_steps):
     """Run the physical simulation for a full day."""
-    T_env = weather["temp"]
-    wind = weather["wind"]
-    rad = weather["rad"]
-
-    n = len(T_env)
+    T_env = daily_data["temp"]
+    wind = daily_data["wind"]
+    rad = daily_data["rad"]
 
     roof_cement = RoofBlock(T_env[0], p.alpha_cement, 0.0, p.C_cement, roof_model, p)
     roof_green = RoofBlock(T_env[0], p.alpha_green, p.k_evap_green, p.C_green, roof_model, p)
@@ -141,51 +174,54 @@ def simulate_physics(weather):
 
     # Spin-up
     for _ in range(p.SPIN_CYCLES):
-        for t in range(n):
+        for t in range(n_steps):
             master.do_step(T_env[t], rad[t], wind[t])
 
     # Main simulation
-    results = {
-        "T_cement": [],
-        "T_green": [],
-        "H_mix": [],
-        "T_air_cement": [],
-        "T_air_green": [],
-        "T_air_fac_cement": [],
-        "T_air_fac_green": [],
-        "Rise_cement": [],
-        "Rise_green": [],
-        "Floors_cement": [],
-        "Floors_green": [],
-    }
-
-    for t in range(n):
+    results = []
+    for t in range(n_steps):
         out = master.do_step(T_env[t], rad[t], wind[t])
-        T_c = out["T_c"]
-        T_g = out["T_g"]
-        H_mix = out["H_mix"]
-        T_air_c = out["T_air_c"]
-        T_air_g = out["T_air_g"]
-        T_air_fac_c = out["T_air_fac_c"]
-        T_air_fac_g = out["T_air_fac_g"]
-        Rise_c = out["Rise_c"]
-        Rise_g = out["Rise_g"]
-        Floors_c = out["Floors_c"]
-        Floors_g = out["Floors_g"]
-
-        results["T_cement"].append(T_c)
-        results["T_green"].append(T_g)
-        results["H_mix"].append(H_mix)
-        results["T_air_cement"].append(T_air_c)
-        results["T_air_green"].append(T_air_g)
-        results["T_air_fac_cement"].append(T_air_fac_c)
-        results["T_air_fac_green"].append(T_air_fac_g)
-        results["Rise_cement"].append(Rise_c)
-        results["Rise_green"].append(Rise_g)
-        results["Floors_cement"].append(Floors_c)
-        results["Floors_green"].append(Floors_g)
+        res = {
+            "T_cement": out["T_c"],
+            "T_green": out["T_g"],
+            "H_mix": out["H_mix"],
+            "T_air_cement": out["T_air_c"],
+            "T_air_green": out["T_air_g"],
+            "T_air_fac_cement": out["T_air_fac_c"],
+            "T_air_fac_green": out["T_air_fac_g"],
+            "Rise_cement": out["Rise_c"],
+            "Rise_green": out["Rise_g"],
+            "Floors_cement": out["Floors_c"],
+            "Floors_green": out["Floors_g"],
+        }
+        results.append(res)
 
     return results
+
+
+def run_ecology_simulation(daily_data, n_steps):
+    """Run the ecology simulation for a full day."""
+    eco_results = []
+
+    for t in range(n_steps):
+        co2_rem, co_rem, pm10_rem, pm25_rem, o2_prod = compute_ecology(
+            daily_data['rad'][t],
+            daily_data['co2'][t],
+            daily_data['co'][t],
+            daily_data['pm10'][t],
+            daily_data['pm25'][t]
+        )
+        
+        res = {
+            "CO2_Removed_g": co2_rem,
+            "CO_Removed_ug": co_rem,
+            "PM10_Removed_ug": pm10_rem,
+            "PM25_Removed_ug": pm25_rem,
+            "O2_Produced_g": o2_prod
+        }
+        eco_results.append(res)
+
+    return eco_results
 
 # ===========================
 # Monte Carlo simulation
@@ -194,52 +230,66 @@ def simulate_physics(weather):
 
 def run_monte_carlo(n_sims=1000):
     """Run Monte Carlo simulations and save all outputs."""
-    mc_results = []
+    trends, params, models, n_steps = load_resource_file()
+
+    daily_samples = []  # weather + air quality generated samples
     weather_samples = []
+    air_samples = []
+    sim_results = []    # physics + eco simulation results
 
     for run in range(n_sims):
         if (run + 1) % 10 == 0 or run == 0:
             print(f"Running simulation {run + 1} / {n_sims}")
 
-        daily_weather = generate_stochastic_day()
+        daily_sample = generate_stochastic_day(n_steps, trends, params, models)
 
         # Save weather sample
-        weather_samples.append(pd.DataFrame({
-            "run_id": run,
-            "hour": range(len(daily_weather["temp"])),
-            **daily_weather
-        }))
+        for t in range(n_steps):
+            weather_samples.append({
+                "run_id": run,
+                "hour": t,
+                "temp": daily_sample["temp"][t],
+                "wind": daily_sample["wind"][t],
+                "rad": daily_sample["rad"][t],
+            })
 
-        daily_res = simulate_physics(daily_weather)
+            air_samples.append({
+                "run_id": run,
+                "hour": t,
+                "rad": daily_sample["rad"][t],
+                "co2": daily_sample["co2"][t],
+                "co": daily_sample["co"][t],
+                "pm10": daily_sample["pm10"][t],
+                "pm25": daily_sample["pm25"][t],
+            })
+
+        phys_res = run_physics_simulation(daily_sample, n_steps)
+        eco_res = run_ecology_simulation(daily_sample, n_steps)
 
         # Save simulation results
-        mc_results.append(pd.DataFrame({
-            "run_id": run,
-            "hour": range(len(daily_res["T_cement"])),
-            **daily_res
-        }))
+        for t in range(n_steps):
+            sim_results.append({
+                "run_id": run,
+                "hour": t,
+                **phys_res[t],
+                **eco_res[t]
+            })
 
-    # Save weather samples
-    df_weather = pd.concat(weather_samples, ignore_index=True)
+    # Save daily samples
+    df_weather = pd.DataFrame(weather_samples)
+    df_air = pd.DataFrame(air_samples)
+    df_sim = pd.DataFrame(sim_results)
+
     df_weather.to_csv(os.path.join(RESULT_DIR, "weather_samples.csv"), index=False)
-
-    # Save MC results
-    df_mc = pd.concat(mc_results, ignore_index=True)
-    df_mc.to_csv(os.path.join(RESULT_DIR, "simulation_results.csv"), index=False)
-
-    return df_mc
+    df_air.to_csv(os.path.join(RESULT_DIR, "air_quality_samples.csv"), index=False)
+    df_sim.to_csv(os.path.join(RESULT_DIR, "simulation_results.csv"), index=False)
 
 # ===========================
 # Main
 # ===========================
 
 
-def main():
-    print("Starting Monte Carlo simulation...")
-    results = run_monte_carlo()
-    print("Simulation complete.")
-    print(results.head())
-
-
 if __name__ == "__main__":
-    main()
+    print("Starting Monte Carlo simulation...")
+    run_monte_carlo()
+    print("Simulation complete.")

@@ -29,10 +29,10 @@ def load_and_clean_data(csv_path, data_type='meteo'):
     elif data_type == 'air_quality':
         data = data.rename(columns={
             'time': 'Timestamp',
-            'carbon_dioxide (ppm)': 'CO2',
-            'pm10 (μg/m³)': 'PM10',
-            'pm2_5 (μg/m³)': 'PM2_5',
-            'carbon_monoxide (μg/m³)': 'CO'
+            'carbon_dioxide (ppm)': 'CO2_ppm',
+            'pm10 (μg/m³)': 'PM10_ugm3',
+            'pm2_5 (μg/m³)': 'PM2_5_ugm3',
+            'carbon_monoxide (μg/m³)': 'CO_ugm3'
         })
         data['Timestamp'] = pd.to_datetime(data['Timestamp'])
         data = data.set_index('Timestamp')
@@ -58,8 +58,13 @@ def calculate_detrend(data, data_type='meteo'):
         }
 
     else:
-        columns = ['CO2', 'PM10', 'PM2_5', 'CO']
-        residual_name_map = {col: f"{col}_Residual" for col in columns}
+        columns = ['CO2_ppm', 'PM10_ugm3', 'PM2_5_ugm3', 'CO_ugm3']
+        residual_name_map = {
+            'CO2_ppm': 'CO2_Residual',
+            'PM10_ugm3': 'PM10_Residual',
+            'PM2_5_ugm3': 'PM2_5_Residual',
+            'CO_ugm3': 'CO_Residual'
+        }
 
     # Calcolo trend orario
     hourly_trend = data.groupby('hour')[columns].mean()
