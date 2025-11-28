@@ -127,7 +127,7 @@ def generate_stochastic_day(n_steps, trends, params, models):
 
         # Wind
         raw_wind = trends["wind"][i] + bias["wind"] + residuals["wind"]
-        output["wind"].append(max(0.05, raw_wind))
+        output["wind"].append(max(1.0, raw_wind))
 
         # Radiation
         if trends["rad"][i] < 5:

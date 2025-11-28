@@ -13,10 +13,9 @@ class FacadeBlock:
         self.H_mix = H_mix
 
     def do_step(self):
-        self.outputs = self.f.compute_facade_effects(
+        self.outputs = self.f.compute_facade_effects_dynamic(
             self.T_air_end_c, self.T_air_end_g,
             self.T_env, self.wind, self.H_mix
         )
-
     def get_outputs(self):
         return self.outputs
