@@ -153,9 +153,10 @@ def analyze_bic_for_gmm(residuals, max_k, variable_name, output_dir):
 
     plt.figure(figsize=(10, 5))
     plt.plot(k_range, bic_scores, 'o-')
-    plt.xlabel('Number of Components (k)')
-    plt.ylabel('BIC Score')
-    plt.title(f'BIC Model Selection for {variable_name} Residuals')
+    plt.xlabel('Number of Components (k)', fontsize=14)
+    plt.ylabel('BIC Score', fontsize=14)
+    plt.title(f'BIC Model Selection for {variable_name} Residuals', fontsize=16)
+    plt.tick_params(axis='both', which='major', labelsize=12)
     plt.grid(True)
     bic_plot_filename = os.path.join(output_dir, f'{variable_name.lower().replace(" ", "_").replace(".", "_")}_bic.png')
     plt.savefig(bic_plot_filename)

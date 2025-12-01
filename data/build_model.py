@@ -78,9 +78,10 @@ def plot_final_gmm_fit(residuals_for_plot, gmm, variable_name, unit):
 
     pdf = np.exp(gmm.score_samples(x))
     plt.plot(x, pdf, 'k-', linewidth=2)
-    plt.title(f'Final GMM Fit ({k} components) to {variable_name} Residuals')
-    plt.xlabel(f'Residual {variable_name} ({unit})')
-    plt.ylabel('Density')
+    plt.title(f'Final GMM Fit ({k} components) to {variable_name} Residuals', fontsize=16)
+    plt.xlabel(f'Residual {variable_name} ({unit})', fontsize=14)
+    plt.ylabel('Density', fontsize=14)
+    plt.tick_params(axis='both', which='major', labelsize=12)
     plt.grid(True, linestyle='--', alpha=0.6)
     filepath = os.path.join(PLOT_DIR, f"{variable_name.lower().replace(' ', '_')}_gmm.png")
     plt.savefig(filepath)
