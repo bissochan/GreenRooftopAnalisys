@@ -1,91 +1,55 @@
 import numpy as np
 from .parameters import *
 
-
 def compute_facade_effects_dynamic(T_air_end_c, T_air_end_g, T_env, wind, H_mix):
-    """
-    Compute facade temperatures, buoyant rise and floors using a time-resolved
-    advection + relaxation model for the air parcel traveling from roof -> facade.
+    dt = 1.0
+    t_mid = 10.0
+    alpha_temp = 0.2
+    T0_rise = 18.0
+    beta_rise = 1.0
+    max_rise_rate = 10.0  # scale factor for rise intensity
 
-    Parameters:
-      - T_air_end_c, T_air_end_g: air parcel temperature leaving roof (°C)
-      - T_env: ambient temperature (°C)
-      - wind: wind speed (m/s)
-      - H_mix: initial mixing height (m)
-      - D: distance roof->facade (m)
-      - gamma_damping, h_floor, wind_eps, g, T0_K: physical params from params module
-      - max_steps: limit on integration steps
-      - k_relax_base: base relaxation rate (s^-1) when wind = 0
-      - k_relax_wind_factor: multiplier to increase k_relax with wind
-    Returns dict with keys like before.
-    """
-    max_steps=3600
-    k_relax_base=0.01,
-    k_relax_wind_factor=0.5
-
-    # protect wind and compute transit time (seconds)
     U = max(wind, wind_eps)
-    tau = max(D / U, 0.0)
+    tau = max(D / U, 0.1)   # transit time (s)
 
-    if tau <= 1.0:
-        # short transit: single-step analytical relaxation
-        n_steps = 1
-        dt = tau if tau > 0 else 1.0
-    else:
-        n_steps = int(np.ceil(min(tau, max_steps)))
-        dt = tau / n_steps
+    # decreasing temperature sigmoid over time
+    def temp_sigmoid_decreasing(T_start, t):
+        return T_env + (T_start - T_env) / (1.0 + np.exp(alpha_temp * (t - t_mid)))
 
-    k_relax = k_relax_base + k_relax_wind_factor * U
-    k_relax = float(np.clip(k_relax, 1e-4, 1.0))    # ensure reasonable bounds
+    # temperature gating (0..1)
+    def rise_gate(T_air):
+        return 1.0 / (1.0 + np.exp(-beta_rise * (T_air - T0_rise)))
 
-    # integration initial conditions
-    z_c = 0.0  # initial vertical position above roof reference (m)
-    z_g = 0.0
-    v_c = 0.0  # vertical velocity (m/s)
-    v_g = 0.0
+    T_env_K = T_env + T0_K
+    # rise increment per step
+    def dz_increment(T_air):
+        delta_T = max(T_air - T_env, 0.0)
+        gate = rise_gate(T_air)
+        delta_scaling = delta_T / T_env_K
+        return max_rise_rate * gate * delta_scaling * dt
 
-    T_c = float(T_air_end_c)
-    T_g = float(T_air_end_g)
-    T_env_K = T_env + T0_K  # used in buoyancy denom (Kelvin offset)
+    n_steps = int(max(1, round(tau / dt)))
 
-    # integrate in time
-    for _ in range(n_steps):
-        # relax toward environment: exponential Euler step
-        T_c = T_c - k_relax * (T_c - T_env) * dt
-        T_g = T_g - k_relax * (T_g - T_env) * dt
+    # initial heights
+    rise_c = H_mix
+    rise_g = H_mix
 
-        a_c = g * max(T_c - T_env, 0.0) / T_env_K
-        a_g = g * max(T_g - T_env, 0.0) / T_env_K
+    # time stepping
+    for i in range(n_steps):
+        t = i * dt
+        T_c = temp_sigmoid_decreasing(T_air_end_c, t)
+        T_g = temp_sigmoid_decreasing(T_air_end_g, t)
 
-        v_c += a_c * dt
-        v_g += a_g * dt
+        rise_c += dz_increment(T_c)
+        rise_g += dz_increment(T_g)
 
-        z_c += v_c * dt
-        z_g += v_g * dt
-
-        if z_c < -1e3 or z_g < -1e3:
-            z_c = max(z_c, -1e3)
-            z_g = max(z_g, -1e3)
-            v_c = np.sign(v_c) * min(abs(v_c), 1e3)
-            v_g = np.sign(v_g) * min(abs(v_g), 1e3)
-
-    rise_c = gamma_damping * z_c + H_mix
-    rise_g = gamma_damping * z_g + H_mix
-
-    # enforce minimum fraction of mixing height
-    rise_c = max(rise_c, H_mix * 0.1)
-    rise_g = max(rise_g, H_mix * 0.1)
-
-    floors_c = int(np.ceil(rise_c / h_floor))
-    floors_g = int(np.ceil(rise_g / h_floor))
-
-    # final facade air temp: parcel has mixed toward env during flight
-    T_air_fac_c = T_c
-    T_air_fac_g = T_g
+    # convert height to floors
+    floors_c = int(np.ceil(max(rise_c, H_mix * 0.1) / h_floor))
+    floors_g = int(np.ceil(max(rise_g, H_mix * 0.1) / h_floor))
 
     return {
-        "T_air_fac_c": T_air_fac_c,
-        "T_air_fac_g": T_air_fac_g,
+        "T_air_fac_c": temp_sigmoid_decreasing(T_air_end_c, tau),
+        "T_air_fac_g": temp_sigmoid_decreasing(T_air_end_g, tau),
         "rise_c": float(rise_c),
         "rise_g": float(rise_g),
         "floors_c": floors_c,

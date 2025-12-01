@@ -127,7 +127,7 @@ def generate_stochastic_day(n_steps, trends, params, models):
 
         # Wind
         raw_wind = trends["wind"][i] + bias["wind"] + residuals["wind"]
-        output["wind"].append(max(1.0, raw_wind))
+        output["wind"].append(max(0.8, raw_wind))
 
         # Radiation
         if trends["rad"][i] < 5:
@@ -228,11 +228,10 @@ def run_ecology_simulation(daily_data, n_steps):
 # ===========================
 
 
-def run_monte_carlo(n_sims=1000):
+def run_monte_carlo(n_sims=5000):
     """Run Monte Carlo simulations and save all outputs."""
     trends, params, models, n_steps = load_resource_file()
 
-    daily_samples = []  # weather + air quality generated samples
     weather_samples = []
     air_samples = []
     sim_results = []    # physics + eco simulation results

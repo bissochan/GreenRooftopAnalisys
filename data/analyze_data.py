@@ -1,4 +1,3 @@
-# --- analyze_data.py aggiornato ---
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -50,7 +49,6 @@ def calculate_detrend(data, data_type='meteo'):
 
     if data_type == 'meteo':
         columns = ['Temp_C', 'Wind_ms', 'Radiation_Wm2']
-        # Mappa dei nomi dei residui coerenti con il codice originale
         residual_name_map = {
             'Temp_C': 'Temperature_Residual',
             'Wind_ms': 'Wind_Speed_Residual',
@@ -66,24 +64,22 @@ def calculate_detrend(data, data_type='meteo'):
             'CO_ugm3': 'CO_Residual'
         }
 
-    # Calcolo trend orario
+    # Hourly trend calculation
     hourly_trend = data.groupby('hour')[columns].mean()
     trend_columns = {col: f"{col}_Trend" for col in columns}
     hourly_trend = hourly_trend.rename(columns=trend_columns)
 
-    # Join trend al dataframe
+    # Join trend to original data
     data = data.join(hourly_trend, on='hour')
 
-    # Calcolo residui
+    # Calculate residuals
     for col in columns:
         residual_col = residual_name_map[col]
         data[residual_col] = data[col] - data[f"{col}_Trend"]
 
-        # Per CO2 dell'air_quality, ignoriamo i NaN
         if data_type == 'air_quality' and col == 'CO2':
             data[residual_col] = data[residual_col].dropna()
 
-    # Salvataggio file CSV
     trend_file = os.path.join(CSV_DIR, f'{data_type}_hourly_trend.csv')
     residual_file = os.path.join(CSV_DIR, f'{data_type}_residuals.csv')
     hourly_trend.to_csv(trend_file)
