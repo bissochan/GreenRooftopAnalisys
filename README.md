@@ -20,3 +20,12 @@ From the project root:
   cd simulation
   python run_MC_simulation.py
  ```
+
+### Evaluate
+From the project root:
+
+ ```bash
+  cd evaluation
+  python simulation_eval.py
+  python weather_air_quality_eval.py
+ ```

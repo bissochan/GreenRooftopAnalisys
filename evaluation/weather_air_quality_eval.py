@@ -81,12 +81,8 @@ def load_data(config):
 def plot_mean(df_comp, var, title, unit, ci_error, output_dir):
     plt.figure()
 
-    trend_key = f"{var}_Trend"
     mean_gen_col = f"gen_{var}_mean"
     mean_real_col = f"{var}_mean"
-
-    if trend_key in df_comp.columns:
-        plt.plot(df_comp["hour"], df_comp[trend_key], color=COLOR_TREND, ls='--')
 
     if mean_real_col in df_comp.columns:
         plt.plot(
@@ -107,7 +103,7 @@ def plot_mean(df_comp, var, title, unit, ci_error, output_dir):
     )
 
     plt.title(f"{title}: Mean Hourly Profile")
-    plt.legend(["Trend", "Real Mean", "Simulated Mean", "95% CI"])
+    plt.legend(["Real Mean", "Simulated Mean", "95% CI"])
     plt.ylabel(f"{title} {unit}")
     plt.xlabel("Hour")
     plt.tight_layout()
@@ -162,8 +158,9 @@ def plot_hist_ecdf_qq(real_vals, gen_vals, var, title, unit, output_dir):
 
 
 def plot_correlation(df, prefix, output_dir):
+    cols_to_drop = ["run_id", "timestamp", "hour"]
     plt.figure(figsize=(6, 5))
-    corr = df.corr()
+    corr = df.drop(columns=cols_to_drop, errors='ignore').corr()
     sns.heatmap(corr, annot=True, cmap='coolwarm', vmin=-1, vmax=1)
     plt.title(f"Correlation Matrix: {prefix}")
     plt.tight_layout()
@@ -189,11 +186,11 @@ def plot_hourly_boxplot(df_sim, df_real, var, title, output_dir):
 def calculate_metrics(df_comp, real_vals, gen_vals, var):
     metrics = {}
 
-    trend_col = f"{var}_Trend"
+    mean_real_col = f"{var}_mean"
     mean_col = f"gen_{var}_mean"
 
-    if trend_col in df_comp.columns:
-        metrics["bias"] = (df_comp[mean_col] - df_comp[trend_col]).abs().mean()
+    if mean_real_col in df_comp.columns:
+        metrics["bias"] = (df_comp[mean_col] - df_comp[mean_real_col]).abs().mean()
     else:
         metrics["bias"] = np.nan
 
