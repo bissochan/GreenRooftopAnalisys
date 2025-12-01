@@ -124,7 +124,7 @@ $$
 The vertical rise is calculated by integrating an incremental rise ($dz$) over the transit time. The rise is "gated" by a logistic function to ensure significant rising only occurs when the temperature exceeds a threshold ($T_{0,rise} \approx 18^\circ C$).
 
 $$
-dz = \text{max\_rate} \cdot \text{Gate}(T) \cdot \frac{T_{parcel} - T_{env}}{T_{env}} \cdot dt
+dz = max\_rate \cdot \text{Gate}(T) \cdot \frac{T_{parcel} - T_{env}}{T_{env}} \cdot dt
 $$
 
 $$
