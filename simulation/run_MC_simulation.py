@@ -9,7 +9,7 @@ from model import parameters as p
 from model import roof as roof_model
 from model import aerodynamics as aero_model
 from model import facade as facade_model
-from model.ecology import compute_ecology
+from model.ecology import compute_ecology, GREEN_ROOF_AREA
 from blocks.roof_block import RoofBlock
 from blocks.aerodynamics_block import AerodynamicsBlock
 from blocks.facade_block import FacadeBlock
@@ -199,29 +199,33 @@ def run_physics_simulation(daily_data, n_steps):
     return results
 
 
-def run_ecology_simulation(daily_data, n_steps):
-    """Run the ecology simulation for a full day."""
-    eco_results = []
 
+# 1. CORREGGI run_ecology_simulation
+def run_ecology_simulation(daily_data, n_steps, wind_speeds, h_mix_values):
+    eco_results = []
+    
     for t in range(n_steps):
+        wind_ms = wind_speeds[t]
+        h_eff = min(20.0, h_mix_values[t] * 3)  # Altezza effettiva realistica
+        area = GREEN_ROOF_AREA
+        
+        air_flow_m3_per_h = wind_ms * area * h_eff * 0.01  # 0.1 = efficienza cattura ~10%
+        
         co2_rem, co_rem, pm10_rem, pm25_rem, o2_prod = compute_ecology(
-            daily_data['rad'][t],
-            daily_data['co2'][t],
-            daily_data['co'][t],
-            daily_data['pm10'][t],
-            daily_data['pm25'][t]
+            daily_data['rad'][t], daily_data['co2'][t], daily_data['co'][t],
+            daily_data['pm10'][t], daily_data['pm25'][t],
+            air_flow_m3_per_h=air_flow_m3_per_h
         )
         
         res = {
-            "CO2_Removed_g": co2_rem,
-            "CO_Removed_ug": co_rem,
-            "PM10_Removed_ug": pm10_rem,
-            "PM25_Removed_ug": pm25_rem,
-            "O2_Produced_g": o2_prod
+            "CO2_Removed_g": co2_rem, "CO_Removed_ug": co_rem,
+            "PM10_Removed_ug": pm10_rem, "PM25_Removed_ug": pm25_rem,
+            "O2_Produced_g": o2_prod, "Air_Flow_m3h": air_flow_m3_per_h
         }
         eco_results.append(res)
-
     return eco_results
+
+
 
 # ===========================
 # Monte Carlo simulation
@@ -263,16 +267,55 @@ def run_monte_carlo(n_sims=5000):
             })
 
         phys_res = run_physics_simulation(daily_sample, n_steps)
-        eco_res = run_ecology_simulation(daily_sample, n_steps)
+        eco_res = run_ecology_simulation(daily_sample, n_steps, daily_sample["wind"], [r["H_mix"] for r in phys_res])
 
-        # Save simulation results
         for t in range(n_steps):
+            H_mix = phys_res[t]["H_mix"]
+            area = GREEN_ROOF_AREA
+
+            co = daily_sample["co"][t]
+            pm10 = daily_sample["pm10"][t]
+            pm25 = daily_sample["pm25"][t]
+
+            co_mass = co * area * H_mix
+            pm10_mass = pm10 * area * H_mix
+            pm25_mass = pm25 * area * H_mix
+
+            co_removed = eco_res[t]["CO_Removed_ug"]
+            pm10_removed = eco_res[t]["PM10_Removed_ug"]
+            pm25_removed = eco_res[t]["PM25_Removed_ug"]
+
+            co_pct = min(100.0, (co_removed / max(co_mass, 1e-6) * 100))
+            pm10_pct = min(100.0, (pm10_removed / max(pm10_mass, 1e-6) * 100))
+            pm25_pct = min(100.0, (pm25_removed / max(pm25_mass, 1e-6) * 100))
+
+            # Concentrazioni FINALI
+            co_final = max(0.0, co - (co_removed / (area * H_mix)))
+            pm10_final = max(0.0, pm10 - (pm10_removed / (area * H_mix)))
+            pm25_final = max(0.0, pm25 - (pm25_removed / (area * H_mix)))
+
+
             sim_results.append({
                 "run_id": run,
                 "hour": t,
                 **phys_res[t],
-                **eco_res[t]
+                **eco_res[t],
+                "CO_Initial_ugm3": co,
+                "CO_Final_ugm3": co_final,
+                "CO2_ppm": daily_sample["co2"][t],
+                "PM10_Initial_ugm3": pm10,
+                "PM10_Final_ugm3": pm10_final,
+                "PM25_Initial_ugm3": pm25,
+                "PM25_Final_ugm3": pm25_final,
+                "CO_Mass_ug": co_mass,
+                "PM10_Mass_ug": pm10_mass,
+                "PM25_Mass_ug": pm25_mass,
+                "CO_Pct_Removed": co_pct,
+                "PM10_Pct_Removed": pm10_pct,
+                "PM25_Pct_Removed": pm25_pct,
+                "Air_Flow_m3h": eco_res[t]["Air_Flow_m3h"]
             })
+
 
     # Save daily samples
     df_weather = pd.DataFrame(weather_samples)
