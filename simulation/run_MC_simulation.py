@@ -200,13 +200,12 @@ def run_physics_simulation(daily_data, n_steps):
 
 
 
-# 1. CORREGGI run_ecology_simulation
 def run_ecology_simulation(daily_data, n_steps, wind_speeds, h_mix_values):
     eco_results = []
     
     for t in range(n_steps):
         wind_ms = wind_speeds[t]
-        h_eff = min(20.0, h_mix_values[t] * 3)  # Altezza effettiva realistica
+        h_eff = min(20.0, h_mix_values[t] * 3)
         area = GREEN_ROOF_AREA
         
         air_flow_m3_per_h = wind_ms * area * h_eff * 0.01  # 0.1 = efficienza cattura ~10%

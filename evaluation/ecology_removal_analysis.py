@@ -1,9 +1,13 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 
 GREEN_ROOF_AREA = 600.0
-df = pd.read_csv('simulation\\csv_results\\simulation_results.csv')
+df_path = os.path.join("..", "simulation", "csv_results", "simulation_results.csv")
+df = pd.read_csv(df_path)
+OUTPUT_DIR = "results"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Convert CO2 ppm → µg/m³
 MOLAR_MASS_CO2 = 44.01  # g/mol
@@ -39,14 +43,14 @@ pollutants = [
 
 for i, (pol, color, label) in enumerate(pollutants):
     row, col = divmod(i, 2)
-    axs[row, col].errorbar(hours, hourly[f"{pol}_Initial_ugm3_mean"], 
-                          yerr=hourly[f"{pol}_Initial_ugm3_std"], 
-                          fmt='-o', color=color, label="Without green roof", 
-                          linewidth=3, capsize=6)
-    axs[row, col].errorbar(hours, hourly[f"{pol}_Final_ugm3_mean"], 
-                          yerr=hourly[f"{pol}_Final_ugm3_std"], 
-                          fmt='-s', color="#27ae60", label="With green roof", 
-                          linewidth=3, capsize=6)
+    axs[row, col].errorbar(hours, hourly[f"{pol}_Initial_ugm3_mean"],
+                           yerr=hourly[f"{pol}_Initial_ugm3_std"],
+                           fmt='-o', color=color, label="Without green roof",
+                           linewidth=3, capsize=6)
+    axs[row, col].errorbar(hours, hourly[f"{pol}_Final_ugm3_mean"],
+                           yerr=hourly[f"{pol}_Final_ugm3_std"],
+                           fmt='-s', color="#27ae60", label="With green roof",
+                           linewidth=3, capsize=6)
     axs[row, col].set_title(f"{label}: Hourly Average Concentration", fontweight='bold', fontsize=14)
     axs[row, col].set_xlabel("Hour of the day")
     axs[row, col].set_ylabel(f"{label} (µg/m³)")
@@ -55,11 +59,11 @@ for i, (pol, color, label) in enumerate(pollutants):
     axs[row, col].set_ylim(0, None)
 
 plt.suptitle("Green Roof Effect: All Pollutants Comparison\n"
-             "(Without vs With Green Roof - Monte Carlo 5000 simulations)", 
+             "(Without vs With Green Roof - Monte Carlo 5000 simulations)",
              fontsize=18, fontweight='bold', y=0.98)
 plt.tight_layout()
-plt.savefig('green_roof_ALL_pollutants_EN.png', dpi=300, bbox_inches='tight')
-plt.show()
+plt.savefig(os.path.join(OUTPUT_DIR, 'pollutants_eval.png'), dpi=300, bbox_inches='tight')
+plt.close()
 
 
 print("\nDAILY AVERAGE REDUCTIONS:")
