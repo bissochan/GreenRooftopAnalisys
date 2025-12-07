@@ -1,0 +1,34 @@
+WEATHER EVALUATION REPORT
+
+[Temperature]
+MEAN BIAS: 0.2585 (°C)
+STD ERROR: 0.5275 (°C)
+COV (Real / Sim): 0.477 / 0.475
+KS STAT: 0.0299
+PERCENTILES (R | S):
+  P05: 4.50 | 3.53
+  P50: 15.90 | 16.41
+  P95: 31.10 | 29.49
+  P99: 35.20 | 34.46
+
+[Wind Speed]
+MEAN BIAS: 0.1486 (m/s)
+STD ERROR: 0.1415 (m/s)
+COV (Real / Sim): 0.598 / 0.583
+KS STAT: 0.1088
+PERCENTILES (R | S):
+  P05: 0.78 | 0.80
+  P50: 2.19 | 2.56
+  P95: 5.73 | 5.74
+  P99: 7.57 | 7.06
+
+[Solar Radiation]
+MEAN BIAS: 7.2607 (W/m²)
+STD ERROR: 30.3055 (W/m²)
+COV (Real / Sim): 1.403 / 1.261
+KS STAT: 0.0509
+PERCENTILES (R | S):
+  P05: 0.00 | 0.00
+  P50: 9.00 | 27.33
+  P95: 753.00 | 666.66
+  P99: 885.00 | 804.00

@@ -1,0 +1,5 @@
+,phi,sigma,bias
+CO2_Residual,0.9753,0.2208,19.5587
+PM10_Residual,0.9733,0.2296,8.4735
+PM2_5_Residual,0.9732,0.2299,6.1579
+CO_Residual,0.9677,0.252,77.8994

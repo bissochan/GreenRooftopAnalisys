@@ -1,0 +1,4 @@
+,phi,sigma,bias
+Temperature_Residual,0.9947,0.1033,7.1577
+Wind_Speed_Residual,0.8921,0.4519,1.0975
+Radiation_Residual,0.9337,0.3581,89.9584
