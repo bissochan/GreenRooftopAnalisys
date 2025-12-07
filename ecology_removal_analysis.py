@@ -55,7 +55,7 @@ for i, (pol, color, label) in enumerate(pollutants):
     axs[row, col].set_ylim(0, None)
 
 plt.suptitle("Green Roof Effect: All Pollutants Comparison\n"
-             "(Without vs With Green Roof - Monte Carlo 100 simulations)", 
+             "(Without vs With Green Roof - Monte Carlo 5000 simulations)", 
              fontsize=18, fontweight='bold', y=0.98)
 plt.tight_layout()
 plt.savefig('green_roof_ALL_pollutants_EN.png', dpi=300, bbox_inches='tight')
