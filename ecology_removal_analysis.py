@@ -61,8 +61,8 @@ plt.tight_layout()
 plt.savefig('green_roof_ALL_pollutants_EN.png', dpi=300, bbox_inches='tight')
 plt.show()
 
-# 📊
-print("\n📊 DAILY AVERAGE REDUCTIONS:")
+
+print("\nDAILY AVERAGE REDUCTIONS:")
 for pol in ["CO2", "CO", "PM10", "PM25"]:
     init_col, final_col = f"{pol}_Initial_ugm3_mean", f"{pol}_Final_ugm3_mean"
     red = ((hourly[init_col] - hourly[final_col]) / hourly[init_col] * 100).mean()
