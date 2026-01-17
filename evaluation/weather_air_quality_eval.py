@@ -156,8 +156,8 @@ def plot_hist_ecdf_qq(real_vals, gen_vals, var, title, unit, output_dir):
     gen_sample = np.random.choice(gen_vals, size=min(len(gen_vals), 2000), replace=False)
     stats.probplot(gen_sample, dist="norm", plot=plt)
     plt.title(f"{title}: QQ Plot", fontsize=16)
-    plt.xlabel(f"{title} {unit}", fontsize=14)
-    plt.ylabel("Quantiles", fontsize=14)
+    plt.xlabel("Quantiles", fontsize=14)
+    plt.ylabel(f"{title} {unit}", fontsize=14)
     plt.legend(["Simulated"])
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, f"{var}_qq.png"))
@@ -252,6 +252,7 @@ def run_evaluation(config):
 
     n_runs = df_sim['run_id'].nunique()
     t_val = stats.t.ppf(0.975, n_runs - 1)
+    print(f"Number of simulation runs: {n_runs}, t-value for 95% CI: {t_val:.4f}")
 
     report_lines = [f"{config['name'].upper()} EVALUATION REPORT\n"]
 

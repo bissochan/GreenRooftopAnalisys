@@ -221,35 +221,53 @@ def plot_convergence(df, var, output_dir):
     plt.savefig(os.path.join(output_dir, f"convergence_{var}.png"))
     plt.close()
 
-
 def plot_diff_cement_green(df, output_dir):
-    bases = ["T", "T_air", "T_air_fac", "Rise", "Floors"]  # puoi aggiungere altri
+    bases = ["T", "T_air", "T_air_fac", "Rise", "Floors"]
+    n_runs = df['run_id'].nunique()
+    t_val = stats.t.ppf(0.975, n_runs - 1)
+
     for base in bases:
         col_c = f"{base}_cement"
         col_g = f"{base}_green"
         if col_c not in df.columns or col_g not in df.columns:
             continue
 
-        df_diff = df.groupby("hour")[[col_c, col_g]].mean()
-        df_diff["delta"] = df_diff[col_c] - df_diff[col_g]
+        hourly_data = []
+        for hour in range(24):
+            hour_df = df[df['hour'] == hour]
+            diff_series = hour_df[col_c] - hour_df[col_g]
+
+            mean_diff = diff_series.mean()
+            std_diff = diff_series.std()
+            ci_margin = t_val * (std_diff / np.sqrt(n_runs))
+
+            hourly_data.append({
+                "hour": hour,
+                "delta": mean_diff,
+                "ci": ci_margin
+            })
+
+        df_plot = pd.DataFrame(hourly_data)
 
         plt.figure()
-        plt.bar(df_diff.index, df_diff["delta"], color="purple", alpha=0.7)
-        plt.axhline(0, color='black', linewidth=0.8)  # zero line
-        plt.title(f"Difference Cement - Green ({base})")
+        bars = plt.bar(df_plot["hour"], df_plot["delta"], color="purple", alpha=0.6, label="Mean Δ")
+        plt.errorbar(df_plot["hour"], df_plot["delta"], yerr=df_plot["ci"], fmt='none',
+                     ecolor='black', capsize=3, elinewidth=1, label="95% CI")
+        plt.axhline(0, color='black', linewidth=0.8)
+        plt.title(f"Difference Cement - Green ({base}) with 95% CI")
         plt.xlabel("Hour")
-        # Units based on variable type
+
         if "T" in base:
             plt.ylabel("Δ [°C]")
-        elif "Rise" in base or "H_mix" in base:
+        elif "Rise" in base:
             plt.ylabel("Δ [m]")
         elif "Floors" in base:
             plt.ylabel("Δ [# floors]")
-        else:
-            plt.ylabel("Δ")
-        plt.xticks(df_diff.index)
+
+        plt.xticks(range(24))
+        plt.legend()
         plt.tight_layout()
-        plt.savefig(os.path.join(output_dir, f"{base}_cement_minus_green.png"))
+        plt.savefig(os.path.join(output_dir, f"{base}_delta_with_CI.png"))
         plt.close()
 
 
